@@ -1,0 +1,5 @@
+Alembic migrations for the synthbud backend.
+
+Use `alembic revision --autogenerate -m "message"` to create new revisions,
+and `alembic upgrade head` to apply them.
+

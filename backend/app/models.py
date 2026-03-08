@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+import enum
 
 from sqlalchemy import (
     JSON,
@@ -83,7 +84,7 @@ class SoundFeatures(Base):
     sound: Mapped[Sound] = relationship("Sound", back_populates="features")
 
 
-class IngestionStatusEnum(str, Enum):
+class IngestionStatusEnum(str, enum.Enum):
     RUNNING = "running"
     SUCCESS = "success"
     ERROR = "error"
@@ -103,7 +104,11 @@ class IngestionRun(Base):
     )
 
     status: Mapped[Optional[IngestionStatusEnum]] = mapped_column(
-        Enum(IngestionStatusEnum), nullable=True
+        Enum(
+            IngestionStatusEnum,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            name="ingestionstatusenum",
+        ),
+        nullable=True,
     )
     details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-

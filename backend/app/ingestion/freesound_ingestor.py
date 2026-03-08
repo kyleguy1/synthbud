@@ -1,12 +1,12 @@
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Iterable, List
 
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import IngestionRun, Sound
+from app.models import IngestionRun, IngestionStatusEnum, Sound
 from .freesound_client import FreesoundClient
 
 
@@ -34,12 +34,15 @@ def db_session() -> Iterable[Session]:
 
 def is_license_allowed(license_url: str) -> bool:
     settings = get_settings()
-    return license_url in settings.license_allowlist_urls
+    normalized = license_url.replace("http://", "https://", 1)
+    allowlist = {str(url).replace("http://", "https://", 1) for url in settings.license_allowlist_urls}
+    return normalized in allowlist
 
 
 def normalize_license_label(license_url: str) -> str | None:
     settings = get_settings()
-    return settings.license_label_map.get(license_url)
+    normalized = license_url.replace("http://", "https://", 1)
+    return settings.license_label_map.get(normalized)
 
 
 def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
@@ -73,17 +76,15 @@ def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
     username = (payload.get("user") or {}).get("username")
     sound.author = username
 
-    sound.updated_at = datetime.utcnow()
+    sound.updated_at = datetime.now(UTC)
 
     return sound
 
 
 def run_ingestion(max_pages_per_query: int | None = None) -> None:
     client = FreesoundClient.from_settings()
-    settings = get_settings()
-
     with db_session() as db:
-        run = IngestionRun(source="freesound", started_at=datetime.utcnow())
+        run = IngestionRun(source="freesound", started_at=datetime.now(UTC))
         db.add(run)
         db.flush()
 
@@ -118,15 +119,15 @@ def run_ingestion(max_pages_per_query: int | None = None) -> None:
                         sound = upsert_sound_from_payload(db, item)
                         ingested_count += 1
 
-            run.status = "success"
-            run.finished_at = datetime.utcnow()
+            run.status = IngestionStatusEnum.SUCCESS
+            run.finished_at = datetime.now(UTC)
             run.details = {
                 "ingested_count": ingested_count,
                 "queries": SEARCH_QUERIES,
             }
         except Exception as exc:  # pragma: no cover - defensive
-            run.status = "error"
-            run.finished_at = datetime.utcnow()
+            run.status = IngestionStatusEnum.ERROR
+            run.finished_at = datetime.now(UTC)
             run.details = {
                 "error": str(exc),
                 "ingested_count": ingested_count,
@@ -136,4 +137,3 @@ def run_ingestion(max_pages_per_query: int | None = None) -> None:
 
 if __name__ == "__main__":
     run_ingestion()
-

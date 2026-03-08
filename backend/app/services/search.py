@@ -1,6 +1,6 @@
 from typing import List, Optional, Sequence, Tuple
 
-from sqlalchemy import Float, and_, func, or_, select
+from sqlalchemy import Float, String, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Sound, SoundFeatures
@@ -38,14 +38,17 @@ def build_sound_search_query(
                 func.lower(Sound.name).like(pattern),
                 func.lower(func.coalesce(Sound.description, "")).like(pattern),
                 func.array_to_string(
-                    func.coalesce(Sound.tags, []), " ", type_=Float  # type: ignore[arg-type]
+                    func.coalesce(Sound.tags, []), " ", type_=String
                 ).ilike(pattern),
             )
         )
 
     if tags:
-        for tag in tags:
-            conditions.append(func.lower(tag) == func.any_(func.lower(Sound.tags)))  # type: ignore[arg-type]
+        tag_conditions = [
+            func.lower(tag) == func.any_(func.lower(Sound.tags))  # type: ignore[arg-type]
+            for tag in tags
+        ]
+        conditions.append(or_(*tag_conditions))
 
     if license_labels:
         conditions.append(Sound.license_label.in_(license_labels))

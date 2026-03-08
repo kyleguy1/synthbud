@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -16,7 +17,7 @@ def health_check(db: Session = Depends(get_db)) -> dict:
     Verifies DB connectivity and returns basic app metadata.
     """
     # Lightweight DB check: run a trivial statement
-    db.execute("SELECT 1")
+    db.execute(text("SELECT 1"))
 
     settings = get_settings()
     return {
@@ -24,4 +25,3 @@ def health_check(db: Session = Depends(get_db)) -> dict:
         "app": settings.app_name,
         "environment": settings.environment,
     }
-

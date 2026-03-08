@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from typing import Iterator
 
 from sqlalchemy import create_engine
@@ -15,7 +14,6 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 
 
-@contextmanager
 def get_db() -> Iterator[Session]:
     """Provide a transactional scope around a series of operations."""
     db = SessionLocal()
@@ -27,4 +25,3 @@ def get_db() -> Iterator[Session]:
         raise
     finally:
         db.close()
-

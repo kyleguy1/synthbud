@@ -51,6 +51,8 @@ Edit `.env`:
   `postgresql+psycopg2://postgres:postgres@localhost:5432/synthbud`
 - **`SYNTHBUD_FREESOUND_API_TOKEN`** – Your Freesound API key (token authentication).
 
+**Security:** Never commit `.env` (it is in `.gitignore`). If your Freesound token was ever committed, revoke it at [freesound.org/home/applications/](https://freesound.org/home/applications/) and create a new one.
+
 Optional (defaults are fine for local dev):
 
 - `SYNTHBUD_APP_NAME`, `SYNTHBUD_ENVIRONMENT`

@@ -55,8 +55,12 @@ def upgrade() -> None:
         sa.Column("analyzed_at", sa.DateTime(timezone=True), nullable=True),
     )
 
-    ingestion_status_enum = sa.Enum(
-        "running", "success", "error", name="ingestionstatusenum"
+    ingestion_status_enum = postgresql.ENUM(
+        "running",
+        "success",
+        "error",
+        name="ingestionstatusenum",
+        create_type=False,
     )
     ingestion_status_enum.create(op.get_bind(), checkfirst=True)
 
@@ -119,8 +123,12 @@ def downgrade() -> None:
     op.drop_index("ix_sounds_tags", table_name="sounds")
 
     op.drop_table("ingestion_runs")
-    ingestion_status_enum = sa.Enum(
-        "running", "success", "error", name="ingestionstatusenum"
+    ingestion_status_enum = postgresql.ENUM(
+        "running",
+        "success",
+        "error",
+        name="ingestionstatusenum",
+        create_type=False,
     )
     ingestion_status_enum.drop(op.get_bind(), checkfirst=True)
 
@@ -129,4 +137,3 @@ def downgrade() -> None:
         "uq_sounds_source_sound_id", table_name="sounds", type_="unique"
     )
     op.drop_table("sounds")
-

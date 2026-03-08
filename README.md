@@ -177,4 +177,18 @@ You can run the ingestor and feature extractor periodically (e.g. via cron or a 
 
 ## Frontend (React/Vite)
 
-*To be added.* A simple UI to browse, filter, and audition sounds will connect to the backend API above.
+The frontend lives in `frontend/` and provides:
+- Search page with top search bar + CC0 toggle, sidebar filters, sound grid, bottom player.
+- Reusable sound cards (title/creator/tags/preview/favorite/quick badges).
+- Favorites page with saved sounds and `Export credits` (`.txt`) action.
+
+### Frontend setup
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Vite runs at **http://localhost:5173** by default and expects the backend at `VITE_API_BASE_URL` (`http://localhost:8000`).

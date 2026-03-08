@@ -16,6 +16,9 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+node_modules/
+frontend/dist/
+frontend/.vite/
 
 # IDE
 .idea/

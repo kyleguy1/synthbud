@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
+    # CORS
+    cors_allow_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:5173"],
+        description="Allowed CORS origins for frontend clients.",
+    )
+
     # Feature extraction
     feature_sample_rate: int = 22_050
     feature_batch_size: int = 16
@@ -60,4 +66,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return cached application settings."""
     return Settings()
-

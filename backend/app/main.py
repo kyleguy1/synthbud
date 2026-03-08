@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .routers import health, sounds, meta
@@ -15,6 +16,14 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # Routers
     app.include_router(health.router)
     app.include_router(sounds.router)
@@ -24,4 +33,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

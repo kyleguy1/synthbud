@@ -68,6 +68,68 @@ PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
 
 Or from inside `backend` (with `alembic.ini` in the same directory if you have a copy there, or using the path above from root).
 
+### Migration troubleshooting (`localhost:5432` + enum conflict)
+
+If migrations fail, two common issues are:
+
+- **Port ownership confusion on `localhost:5432`**
+- **Postgres enum conflict:** `type "ingestionstatusenum" already exists`
+
+Use this checklist:
+
+1. **Check what owns `5432`:**
+
+```bash
+lsof -nP -iTCP:5432 -sTCP:LISTEN
+docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}'
+```
+
+If you use this repo's Docker setup, `backend-postgres-1` binding `0.0.0.0:5432->5432/tcp` is expected.
+
+2. **Confirm your app points to the same DB in `backend/.env`:**
+
+```env
+SYNTHBUD_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/synthbud
+```
+
+3. **Run migrations from repo root:**
+
+```bash
+cd /path/to/synthbud
+source backend/.venv/bin/activate
+PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+```
+
+4. **If you see `ingestionstatusenum already exists`, clean and retry:**
+
+```bash
+docker exec backend-postgres-1 psql -U postgres -d synthbud -c "DROP TYPE IF EXISTS ingestionstatusenum CASCADE;"
+PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+```
+
+5. **Verify migration state:**
+
+```bash
+PYTHONPATH=backend alembic -c backend/alembic.ini current
+docker exec backend-postgres-1 psql -U postgres -d synthbud -c "\dt"
+```
+
+Expected current revision:
+
+```text
+0001_initial_schema (head)
+```
+
+If you want a full reset of local Docker Postgres data:
+
+```bash
+cd backend
+docker compose down -v
+docker compose up -d
+cd ..
+PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+```
+
 ### 5. Start the API server
 
 From the **backend** directory:

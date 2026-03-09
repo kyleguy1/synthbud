@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { listSounds, listTags } from "../api/client";
+import { ApiError, listSounds, listTags } from "../api/client";
 import { FiltersSidebar } from "../components/FiltersSidebar";
 import { SoundCard } from "../components/SoundCard";
 import { TopBar } from "../components/TopBar";
@@ -30,7 +30,7 @@ export function SearchPage() {
   const [total, setTotal] = useState(0);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SearchPageError | null>(null);
 
   const debouncedFilters = useDebouncedValue(filters, 300);
   const { toggleFromSummary, isFavoriteSound } = useFavorites();
@@ -55,8 +55,14 @@ export function SearchPage() {
         setSounds(response.items);
         setTotal(response.total);
       })
-      .catch((fetchError: Error) => {
-        setError(fetchError.message || "Unable to fetch sounds");
+      .catch((fetchError: unknown) => {
+        if (fetchError instanceof ApiError) {
+          setError({ message: fetchError.message, kind: fetchError.kind });
+        } else if (fetchError instanceof Error) {
+          setError({ message: fetchError.message, kind: "unknown" });
+        } else {
+          setError({ message: "Unable to fetch sounds", kind: "unknown" });
+        }
         setSounds([]);
       })
       .finally(() => setLoading(false));
@@ -97,7 +103,21 @@ export function SearchPage() {
 
         <section className="sound-grid-section">
           {loading ? <p>Loading sounds...</p> : null}
-          {error ? <p className="error">{error}</p> : null}
+          {error ? (
+            <div className="error-block">
+              <p className="error">{error.message}</p>
+              {error.kind === "network" ? (
+                <p className="error-hint">
+                  Backend appears offline. Verify <code>http://localhost:8000/api/health/</code>.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {!loading && !error && sounds.length === 0 ? (
+            <p className="empty-state">
+              No sounds found for current filters. Try clearing one or more filters.
+            </p>
+          ) : null}
 
           <div className="sound-grid">
             {sounds.map((sound) => (
@@ -145,4 +165,8 @@ export function SearchPage() {
       </div>
     </main>
   );
+}
+interface SearchPageError {
+  message: string;
+  kind: "network" | "http" | "unknown";
 }

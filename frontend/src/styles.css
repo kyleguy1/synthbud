@@ -234,6 +234,20 @@ body {
   color: #b71540;
 }
 
+.error-block {
+  margin-bottom: 0.8rem;
+}
+
+.error-hint {
+  color: #37464f;
+  margin: 0.2rem 0 0;
+}
+
+.empty-state {
+  color: #37464f;
+  margin: 0.2rem 0 0.8rem;
+}
+
 @media (max-width: 900px) {
   .search-content {
     grid-template-columns: 1fr;

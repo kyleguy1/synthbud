@@ -3,10 +3,42 @@ import { toSearchParams } from "../lib/query";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+export type ApiErrorKind = "network" | "http";
+
+export class ApiError extends Error {
+  kind: ApiErrorKind;
+  endpoint: string;
+  status?: number;
+
+  constructor(kind: ApiErrorKind, message: string, endpoint: string, status?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.kind = kind;
+    this.endpoint = endpoint;
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const endpoint = `${API_BASE_URL}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(endpoint);
+  } catch {
+    throw new ApiError(
+      "network",
+      `Backend unreachable at ${API_BASE_URL}. Check ${API_BASE_URL}/api/health/.`,
+      endpoint
+    );
+  }
+
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+    throw new ApiError(
+      "http",
+      `Request failed (${response.status}) for ${path}`,
+      endpoint,
+      response.status
+    );
   }
   return (await response.json()) as T;
 }

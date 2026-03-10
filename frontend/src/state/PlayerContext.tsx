@@ -21,7 +21,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     sound: null,
     isPlaying: false,
     currentTime: 0,
-    duration: 0
+    duration: 0,
+    error: null
   });
 
   useEffect(() => {
@@ -67,12 +68,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     if (audio.src !== sound.previewUrl) {
       audio.src = sound.previewUrl;
-      setState({ sound, isPlaying: false, currentTime: 0, duration: 0 });
+      setState({ sound, isPlaying: false, currentTime: 0, duration: 0, error: null });
     } else {
-      setState((prev) => ({ ...prev, sound }));
+      setState((prev) => ({ ...prev, sound, error: null }));
     }
 
-    await audio.play();
+    try {
+      await audio.play();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to play audio";
+      setState((prev) => ({ ...prev, isPlaying: false, error: message }));
+    }
   }, []);
 
   const togglePlayPause = useCallback(async () => {
@@ -82,7 +88,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
 
     if (audio.paused) {
-      await audio.play();
+      try {
+        await audio.play();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to play audio";
+        setState((prev) => ({ ...prev, isPlaying: false, error: message }));
+      }
     } else {
       audio.pause();
     }

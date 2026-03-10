@@ -1,7 +1,7 @@
 import type { PaginatedResponse, SearchFilters, SoundDetail, SoundSummary } from "../types";
 import { toSearchParams } from "../lib/query";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export type ApiErrorKind = "network" | "http";
 
@@ -54,4 +54,8 @@ export async function listTags(): Promise<string[]> {
 
 export async function getSoundDetail(soundId: number): Promise<SoundDetail> {
   return request<SoundDetail>(`/api/sounds/${soundId}`);
+}
+
+export function getPlayableUrl(soundId: number, previewUrl: string | null): string {
+  return previewUrl || `${API_BASE_URL}/api/sounds/${soundId}/preview`;
 }

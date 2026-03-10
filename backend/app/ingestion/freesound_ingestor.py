@@ -45,6 +45,22 @@ def normalize_license_label(license_url: str) -> str | None:
     return settings.license_label_map.get(normalized)
 
 
+def extract_preview_url(payload: dict) -> str | None:
+    previews = payload.get("previews") or {}
+    # Freesound preview keys are hyphenated; keep underscore variants for old payloads.
+    return (
+        previews.get("preview-hq-mp3")
+        or previews.get("preview-lq-mp3")
+        or previews.get("preview_hq_mp3")
+        or previews.get("preview_lq_mp3")
+    )
+
+
+def extract_author(payload: dict) -> str | None:
+    # Search API usually exposes "username". Keep nested "user.username" fallback.
+    return payload.get("username") or (payload.get("user") or {}).get("username")
+
+
 def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
     source = "freesound"
     source_sound_id = str(payload["id"])
@@ -66,15 +82,14 @@ def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
     sound.sample_rate = payload.get("samplerate")
     sound.channels = payload.get("channels")
 
-    sound.preview_url = (payload.get("previews") or {}).get("preview_hq_mp3")
+    sound.preview_url = extract_preview_url(payload)
     sound.file_url = payload.get("download")
     sound.source_page_url = payload.get("url")
 
     license_url = payload.get("license") or ""
     sound.license_url = license_url
     sound.license_label = normalize_license_label(license_url)
-    username = (payload.get("user") or {}).get("username")
-    sound.author = username
+    sound.author = extract_author(payload)
 
     sound.updated_at = datetime.now(UTC)
 

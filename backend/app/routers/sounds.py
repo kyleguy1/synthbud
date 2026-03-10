@@ -1,11 +1,15 @@
 from typing import List, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
+from app.ingestion.freesound_client import FreesoundClient
+from app.ingestion.freesound_ingestor import extract_author, extract_preview_url
 from app.models import Sound, SoundFeatures
 from app.schemas import PaginatedResponse, SoundDetail, SoundFeatures as SoundFeaturesSchema, SoundSummary
 from app.services.search import build_sound_search_query
@@ -133,3 +137,49 @@ def get_sound_detail(
         features=features_schema,
     )
 
+
+@router.get("/{sound_id}/preview")
+def stream_sound_preview(
+    sound_id: int,
+    db: Session = Depends(get_db),
+):
+    sound = db.get(Sound, sound_id)
+    if sound is None:
+        raise HTTPException(status_code=404, detail="Sound not found")
+
+    if sound.preview_url:
+        return RedirectResponse(url=sound.preview_url)
+
+    if sound.source != "freesound":
+        raise HTTPException(status_code=404, detail="No preview available for this source")
+
+    settings = get_settings()
+    if settings.freesound_api_token in ("...", "your_freesound_token_here"):
+        raise HTTPException(
+            status_code=503,
+            detail="Freesound token is not configured on the backend",
+        )
+
+    try:
+        payload = FreesoundClient.from_settings().get_sound(
+            int(sound.source_sound_id),
+            fields=["id", "previews", "download", "url", "username"],
+        )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=f"Failed to fetch upstream metadata ({exc.response.status_code})",
+        ) from exc
+
+    preview_url = extract_preview_url(payload)
+    if not preview_url:
+        raise HTTPException(status_code=404, detail="No preview URL available for this sound")
+
+    # Persist metadata so subsequent requests avoid upstream calls.
+    sound.preview_url = preview_url
+    sound.file_url = payload.get("download") or sound.file_url
+    sound.source_page_url = payload.get("url") or sound.source_page_url
+    sound.author = extract_author(payload) or sound.author
+    db.commit()
+
+    return RedirectResponse(url=preview_url)

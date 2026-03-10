@@ -53,4 +53,5 @@ export interface PlayerState {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  error: string | null;
 }

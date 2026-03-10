@@ -5,6 +5,7 @@ import { FiltersSidebar } from "../components/FiltersSidebar";
 import { SoundCard } from "../components/SoundCard";
 import { TopBar } from "../components/TopBar";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { soundSummaryToFavorite } from "../lib/favorites";
 import { filtersFromUrlParams, filtersToUrlParams } from "../lib/query";
 import { useFavorites } from "../state/FavoritesContext";
 import { usePlayer } from "../state/PlayerContext";
@@ -127,16 +128,7 @@ export function SearchPage() {
                 isFavorite={isFavoriteSound(sound.id)}
                 onToggleFavorite={toggleFromSummary}
                 onPreview={(summary) => {
-                  void playSound({
-                    id: summary.id,
-                    name: summary.name,
-                    author: summary.author,
-                    durationSec: summary.duration_sec,
-                    tags: summary.tags,
-                    licenseLabel: summary.license_label,
-                    previewUrl: summary.preview_url,
-                    sourceUrl: null
-                  });
+                  void playSound(soundSummaryToFavorite(summary));
                 }}
               />
             ))}

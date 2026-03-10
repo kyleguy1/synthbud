@@ -197,6 +197,11 @@ body {
   display: grid;
 }
 
+.player-error {
+  color: #ffafc6;
+  font-size: 0.85rem;
+}
+
 .favorites-page {
   padding: 1rem;
 }

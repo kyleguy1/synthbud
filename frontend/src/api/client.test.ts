@@ -1,4 +1,4 @@
-import { ApiError, listTags } from "./client";
+import { ApiError, getPlayableUrl, listTags } from "./client";
 
 describe("api client errors", () => {
   it("classifies network failures", async () => {
@@ -30,5 +30,15 @@ describe("api client errors", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+});
+
+describe("getPlayableUrl", () => {
+  it("uses provided preview URL when available", () => {
+    expect(getPlayableUrl(42, "https://cdn.example.com/p.mp3")).toBe("https://cdn.example.com/p.mp3");
+  });
+
+  it("falls back to backend preview proxy route", () => {
+    expect(getPlayableUrl(42, null)).toBe("http://localhost:8000/api/sounds/42/preview");
   });
 });

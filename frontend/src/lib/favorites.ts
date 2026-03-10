@@ -1,3 +1,4 @@
+import { getPlayableUrl } from "../api/client";
 import type { FavoriteSound, SoundSummary } from "../types";
 
 const STORAGE_KEY = "synthbud-favorites";
@@ -13,7 +14,10 @@ export function loadFavorites(): FavoriteSound[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed;
+    return parsed.map((sound) => ({
+      ...sound,
+      previewUrl: sound.previewUrl || getPlayableUrl(sound.id, null),
+    }));
   } catch {
     return [];
   }
@@ -43,7 +47,7 @@ export function soundSummaryToFavorite(sound: SoundSummary): FavoriteSound {
     durationSec: sound.duration_sec,
     tags: sound.tags,
     licenseLabel: sound.license_label,
-    previewUrl: sound.preview_url,
+    previewUrl: getPlayableUrl(sound.id, sound.preview_url),
     sourceUrl: null
   };
 }

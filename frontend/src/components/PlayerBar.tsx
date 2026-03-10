@@ -29,6 +29,7 @@ export function PlayerBar() {
       <span>
         {formatDuration(state.currentTime)} / {formatDuration(state.duration || null)}
       </span>
+      {state.error ? <span className="player-error">{state.error}</span> : null}
     </footer>
   );
 }

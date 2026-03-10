@@ -37,7 +37,7 @@ export function SoundCard({ sound, isFavorite, onToggleFavorite, onPreview }: So
         ))}
       </div>
 
-      <button type="button" onClick={() => onPreview(sound)} disabled={!sound.preview_url}>
+      <button type="button" onClick={() => onPreview(sound)}>
         Preview
       </button>
     </article>

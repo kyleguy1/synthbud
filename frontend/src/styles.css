@@ -127,6 +127,13 @@ body {
   padding: 0.9rem;
   display: grid;
   gap: 0.7rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.sound-card.active {
+  border-color: #2f8f83;
+  box-shadow: 0 8px 20px rgba(47, 143, 131, 0.18);
+  transform: translateY(-1px);
 }
 
 .sound-card-header {
@@ -168,6 +175,36 @@ body {
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
   background: #edf5fa;
+}
+
+.preview-button {
+  border: 1px solid #0d3b3f;
+  background: #f4fbfb;
+  color: #0d3b3f;
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.preview-button:hover:not(:disabled) {
+  background: #e4f6f4;
+}
+
+.preview-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.preview-button.playing {
+  background: #0d3b3f;
+  color: #f5fffd;
+  border-color: #0d3b3f;
+}
+
+.preview-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .pagination {

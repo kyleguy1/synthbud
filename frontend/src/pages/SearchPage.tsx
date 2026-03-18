@@ -35,7 +35,7 @@ export function SearchPage() {
 
   const debouncedFilters = useDebouncedValue(filters, 300);
   const { toggleFromSummary, isFavoriteSound } = useFavorites();
-  const { playSound } = usePlayer();
+  const { state: playerState, playSound, togglePlayPause } = usePlayer();
 
   useEffect(() => {
     void listTags()
@@ -121,17 +121,26 @@ export function SearchPage() {
           ) : null}
 
           <div className="sound-grid">
-            {sounds.map((sound) => (
-              <SoundCard
-                key={sound.id}
-                sound={sound}
-                isFavorite={isFavoriteSound(sound.id)}
-                onToggleFavorite={toggleFromSummary}
-                onPreview={(summary) => {
-                  void playSound(soundSummaryToFavorite(summary));
-                }}
-              />
-            ))}
+            {sounds.map((sound) => {
+              const isActive = playerState.sound?.id === sound.id;
+              return (
+                <SoundCard
+                  key={sound.id}
+                  sound={sound}
+                  isFavorite={isFavoriteSound(sound.id)}
+                  isActive={isActive}
+                  isPlaying={isActive && playerState.isPlaying}
+                  onToggleFavorite={toggleFromSummary}
+                  onPreviewToggle={(summary) => {
+                    if (playerState.sound?.id === summary.id) {
+                      void togglePlayPause();
+                      return;
+                    }
+                    void playSound(soundSummaryToFavorite(summary));
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className="pagination">

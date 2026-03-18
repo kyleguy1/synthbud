@@ -19,11 +19,18 @@ const sound: SoundSummary = {
 describe("SoundCard", () => {
   it("renders core metadata and actions", async () => {
     const user = userEvent.setup();
-    const onPreview = vi.fn();
+    const onPreviewToggle = vi.fn();
     const onFavorite = vi.fn();
 
     render(
-      <SoundCard sound={sound} isFavorite={false} onToggleFavorite={onFavorite} onPreview={onPreview} />
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive={false}
+        isPlaying={false}
+        onToggleFavorite={onFavorite}
+        onPreviewToggle={onPreviewToggle}
+      />
     );
 
     expect(screen.getByText("Bright Pluck")).toBeInTheDocument();
@@ -31,7 +38,7 @@ describe("SoundCard", () => {
     expect(screen.getByText("CC0")).toBeInTheDocument();
     expect(screen.getByText("0:02")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
-    expect(onPreview).toHaveBeenCalledWith(sound);
+    await user.click(screen.getByRole("button", { name: "Play preview" }));
+    expect(onPreviewToggle).toHaveBeenCalledWith(sound);
   });
 });

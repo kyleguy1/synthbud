@@ -4,13 +4,25 @@ import type { SoundSummary } from "../types";
 interface SoundCardProps {
   sound: SoundSummary;
   isFavorite: boolean;
+  isActive: boolean;
+  isPlaying: boolean;
   onToggleFavorite: (sound: SoundSummary) => void;
-  onPreview: (sound: SoundSummary) => void;
+  onPreviewToggle: (sound: SoundSummary) => void;
 }
 
-export function SoundCard({ sound, isFavorite, onToggleFavorite, onPreview }: SoundCardProps) {
+export function SoundCard({
+  sound,
+  isFavorite,
+  isActive,
+  isPlaying,
+  onToggleFavorite,
+  onPreviewToggle
+}: SoundCardProps) {
+  const hasPreview = Boolean(sound.preview_url);
+  const previewLabel = !hasPreview ? "No preview" : isActive ? (isPlaying ? "Pause" : "Resume") : "Play preview";
+
   return (
-    <article className="sound-card">
+    <article className={isActive ? "sound-card active" : "sound-card"}>
       <div className="sound-card-header">
         <div>
           <h3>{sound.name}</h3>
@@ -37,8 +49,13 @@ export function SoundCard({ sound, isFavorite, onToggleFavorite, onPreview }: So
         ))}
       </div>
 
-      <button type="button" onClick={() => onPreview(sound)}>
-        Preview
+      <button
+        type="button"
+        className={isPlaying && isActive ? "preview-button playing" : "preview-button"}
+        onClick={() => onPreviewToggle(sound)}
+        disabled={!hasPreview}
+      >
+        {previewLabel}
       </button>
     </article>
   );

@@ -24,7 +24,9 @@ vi.mock("../state/FavoritesContext", () => ({
 
 vi.mock("../state/PlayerContext", () => ({
   usePlayer: () => ({
-    playSound: vi.fn()
+    state: { sound: null, isPlaying: false, currentTime: 0, duration: 0, error: null },
+    playSound: vi.fn(),
+    togglePlayPause: vi.fn()
   })
 }));
 
@@ -49,9 +51,8 @@ describe("SearchPage states", () => {
     renderWithRouter();
 
     expect(await screen.findByText(/Backend unreachable at http:\/\/localhost:8000/i)).toBeInTheDocument();
-    expect(
-      await screen.findByText(/Verify http:\/\/localhost:8000\/api\/health\//i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Backend appears offline\./i)).toBeInTheDocument();
+    expect(screen.getByText("http://localhost:8000/api/health/")).toBeInTheDocument();
   });
 
   it("shows empty state when request succeeds with no sounds", async () => {

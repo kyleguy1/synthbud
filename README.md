@@ -192,3 +192,26 @@ npm run dev
 ```
 
 Vite runs at **http://localhost:5173** by default and expects the backend at `VITE_API_BASE_URL` (`http://localhost:8000`).
+
+---
+
+## One-Step Local Startup
+
+If you want to start everything together without manually running backend/frontend commands:
+
+- VS Code: `Terminal` -> `Run Task` -> `Start All (DB + App)`
+- This uses `.vscode/tasks.json` and runs:
+  - `Start Postgres (Docker)` (if you use Docker for local Postgres)
+  - `Start Synthbud App` (backend + frontend together)
+
+You can also run from the repo root:
+
+```bash
+./scripts/dev.sh
+```
+
+That script starts:
+- backend on `http://localhost:8000`
+- frontend on `http://localhost:5173`
+
+Press `Ctrl+C` in that terminal to stop both.

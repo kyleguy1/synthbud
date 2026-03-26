@@ -1,100 +1,36 @@
 # synthbud
 
-Personal project for generating/scraping free synth sounds (leads, plucks, melodies) that are copyright friendly. The backend ingests CC0/CC-BY sounds from the [Freesound API](https://freesound.org/docs/api/authentication.html#token-authentication), stores them in Postgres, extracts audio features, and exposes a REST API for search and filtering.
+Generate and browse copyright-friendly synth sounds (CC0/CC-BY).
 
----
+## Prerequisites
 
-## Backend (Python + FastAPI + Postgres)
+- Python 3.10+
+- Node.js (includes `npm`)
+- Docker (optional, for local Postgres)
+- Freesound API token: [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply)
 
-### Prerequisites
+## Backend setup
 
-- **Python 3.10+**
-- **PostgreSQL** (running locally or remotely)
-- A **Freesound API token** from [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply)
-
-### 1. Create the database
-
-Create a Postgres database (e.g. named `synthbud`):
-
-```bash
-createdb synthbud
-```
-
-Or with `psql`:
-
-```sql
-CREATE DATABASE synthbud;
-```
-
-### 2. Set up the Python environment
-
-From the project root:
+From project root:
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate   # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 3. Configure environment variables
-
-Copy the example env file and set your values:
-
-```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Set `SYNTHBUD_FREESOUND_API_TOKEN` in `backend/.env`.
 
-- **`SYNTHBUD_DATABASE_URL`** – Postgres URL. Default:
-  `postgresql+psycopg2://postgres:postgres@localhost:5433/synthbud`
-- **`SYNTHBUD_FREESOUND_API_TOKEN`** – Your Freesound API key (token authentication).
-
-**Security:** Never commit `.env` (it is in `.gitignore`). If your Freesound token was ever committed, revoke it at [freesound.org/home/applications/](https://freesound.org/home/applications/) and create a new one.
-
-Optional (defaults are fine for local dev):
-
-- `SYNTHBUD_APP_NAME`, `SYNTHBUD_ENVIRONMENT`
-- `SYNTHBUD_DEFAULT_PAGE_SIZE`, `SYNTHBUD_MAX_PAGE_SIZE`
-- `SYNTHBUD_FEATURE_SAMPLE_RATE`, `SYNTHBUD_FEATURE_BATCH_SIZE`
-
-### 4. Run database migrations
-
-From the **project root** (so that `backend/alembic.ini` and `backend/alembic` are found):
+Start Postgres (Docker):
 
 ```bash
-cd /path/to/synthbud
-PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+cd backend
+docker compose up -d
 ```
 
-Or from inside `backend` (with `alembic.ini` in the same directory if you have a copy there, or using the path above from root).
-
-### Migration troubleshooting (`localhost:5433` + enum conflict)
-
-If migrations fail, two common issues are:
-
-- **Port ownership confusion on `localhost:5433`**
-- **Postgres enum conflict:** `type "ingestionstatusenum" already exists`
-
-Use this checklist:
-
-1. **Check what owns `5433`:**
-
-```bash
-lsof -nP -iTCP:5433 -sTCP:LISTEN
-docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}'
-```
-
-If you use this repo's Docker setup, `backend-postgres-1` binding `0.0.0.0:5433->5432/tcp` is expected.
-
-2. **Confirm your app points to the same DB in `backend/.env`:**
-
-```env
-SYNTHBUD_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/synthbud
-```
-
-3. **Run migrations from repo root:**
+Run migrations (from project root):
 
 ```bash
 cd /path/to/synthbud
@@ -102,87 +38,18 @@ source backend/.venv/bin/activate
 PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
 ```
 
-4. **If you see `ingestionstatusenum already exists`, clean and retry:**
-
-```bash
-docker exec backend-postgres-1 psql -U postgres -d synthbud -c "DROP TYPE IF EXISTS ingestionstatusenum CASCADE;"
-PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
-```
-
-5. **Verify migration state:**
-
-```bash
-PYTHONPATH=backend alembic -c backend/alembic.ini current
-docker exec backend-postgres-1 psql -U postgres -d synthbud -c "\dt"
-```
-
-Expected current revision:
-
-```text
-0001_initial_schema (head)
-```
-
-If you want a full reset of local Docker Postgres data:
+Run backend API:
 
 ```bash
 cd backend
-docker compose down -v
-docker compose up -d
-cd ..
-PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
-```
-
-### 5. Start the API server
-
-From the **backend** directory:
-
-```bash
-cd backend
+source .venv/bin/activate
 python -m app
 ```
 
-The API will be at **http://localhost:8000**.
+- API: `http://localhost:8000`
+- Docs: `http://localhost:8000/api/docs`
 
-- **OpenAPI docs**: http://localhost:8000/api/docs  
-- **Health check**: http://localhost:8000/api/health/
-
-### 6. (Optional) Ingest sounds and extract features
-
-Populate the database with CC0/CC-BY synth-related sounds from Freesound:
-
-```bash
-cd backend
-python -m app.ingestion.freesound_ingestor
-```
-
-Then compute audio features (brightness, loudness, BPM, etc.) for previews:
-
-```bash
-python -m app.ingestion.feature_extractor
-```
-
-You can run the ingestor and feature extractor periodically (e.g. via cron or a scheduler). The API will serve and filter sounds from the data already in Postgres.
-
-### Backend API overview
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health/` | Health check and DB connectivity |
-| `GET /api/sounds` | Paginated sound list with filters (q, tags, license, duration, brightness, bpm, key, is_loop) |
-| `GET /api/sounds/{id}` | Full sound metadata and features |
-| `GET /api/meta/tags` | Top tags for filter chips |
-| `GET /api/meta/licenses` | Allowed license labels/URLs |
-
----
-
-## Frontend (React/Vite)
-
-The frontend lives in `frontend/` and provides:
-- Search page with top search bar + CC0 toggle, sidebar filters, sound grid, bottom player.
-- Reusable sound cards (title/creator/tags/preview/favorite/quick badges).
-- Favorites page with saved sounds and `Export credits` (`.txt`) action.
-
-### Frontend setup
+## Frontend setup
 
 ```bash
 cd frontend
@@ -191,27 +58,23 @@ npm install
 npm run dev
 ```
 
-Vite runs at **http://localhost:5173** by default and expects the backend at `VITE_API_BASE_URL` (`http://localhost:8000`).
+- App: `http://localhost:5173`
 
----
-
-## One-Step Local Startup
-
-If you want to start everything together without manually running backend/frontend commands:
-
-- VS Code: `Terminal` -> `Run Task` -> `Start All (DB + App)`
-- This uses `.vscode/tasks.json` and runs:
-  - `Start Postgres (Docker)` (if you use Docker for local Postgres)
-  - `Start Synthbud App` (backend + frontend together)
-
-You can also run from the repo root:
+## Optional data ingestion
 
 ```bash
-./scripts/dev.sh
+cd backend
+source .venv/bin/activate
+python -m app.ingestion.freesound_ingestor
+python -m app.ingestion.feature_extractor
 ```
 
-That script starts:
-- backend on `http://localhost:8000`
-- frontend on `http://localhost:5173`
+## Minimal troubleshooting
 
-Press `Ctrl+C` in that terminal to stop both.
+- `npm: command not found` -> install Node.js, then reopen terminal.
+- `type "ingestionstatusenum" already exists` during migration:
+
+```bash
+docker exec backend-postgres-1 psql -U postgres -d synthbud -c "DROP TYPE IF EXISTS ingestionstatusenum CASCADE;"
+PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+```

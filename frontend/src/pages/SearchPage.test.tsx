@@ -39,20 +39,20 @@ describe("SearchPage states", () => {
     vi.clearAllMocks();
   });
 
-  it("shows actionable backend hint for network failures", async () => {
+  it("shows a friendly message for network failures", async () => {
     mockListSounds.mockRejectedValue(
       new ApiError(
         "network",
-        "Backend unreachable at http://localhost:8000. Check http://localhost:8000/api/health/.",
+        "We couldn't load data right now. Please try again in a moment.",
         "http://localhost:8000/api/sounds/"
       )
     );
 
     renderWithRouter();
 
-    expect(await screen.findByText(/Backend unreachable at http:\/\/localhost:8000/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Backend appears offline\./i)).toBeInTheDocument();
-    expect(screen.getByText("http://localhost:8000/api/health/")).toBeInTheDocument();
+    expect(await screen.findByText(/We couldn't load sounds right now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Backend unreachable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/api\/health/i)).not.toBeInTheDocument();
   });
 
   it("shows empty state when request succeeds with no sounds", async () => {

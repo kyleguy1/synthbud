@@ -4,9 +4,10 @@ describe("api client errors", () => {
   it("classifies network failures", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-    await expect(listTags()).rejects.toMatchObject<ApiError>({
+    await expect(listTags()).rejects.toMatchObject({
       name: "ApiError",
-      kind: "network"
+      kind: "network",
+      message: "We couldn't load data right now. Please try again in a moment."
     });
   });
 
@@ -21,7 +22,7 @@ describe("api client errors", () => {
       )
     );
 
-    await expect(listTags()).rejects.toMatchObject<ApiError>({
+    await expect(listTags()).rejects.toMatchObject({
       name: "ApiError",
       kind: "http",
       status: 500

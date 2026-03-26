@@ -27,7 +27,7 @@ async function request<T>(path: string): Promise<T> {
   } catch {
     throw new ApiError(
       "network",
-      `Backend unreachable at ${API_BASE_URL}. Check ${API_BASE_URL}/api/health/.`,
+      "We couldn't load data right now. Please try again in a moment.",
       endpoint
     );
   }

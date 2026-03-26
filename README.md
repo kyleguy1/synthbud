@@ -60,6 +60,18 @@ npm run dev
 
 - App: `http://localhost:5173`
 
+## One-step startup
+
+```bash
+./scripts/dev.sh
+```
+
+The script now:
+- starts Docker Postgres if available
+- reuses an already healthy backend on `localhost:8000`
+- clears a stale repo backend process that is blocking port `8000`
+- stops with a clear message if some unrelated process is using `8000`
+
 ## Optional data ingestion
 
 ```bash

@@ -6,9 +6,14 @@ interface PlayerContextValue {
   playSound: (sound: FavoriteSound) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (nextTime: number) => void;
+  closePlayer: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
+
+function isIgnorablePlaybackError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -40,23 +45,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
 
     const onPause = () => {
-      setState((prev) => ({ ...prev, isPlaying: false }));
+      setState((prev) => ({ ...prev, isPlaying: false, error: null }));
     };
 
     const onPlay = () => {
-      setState((prev) => ({ ...prev, isPlaying: true }));
+      setState((prev) => ({ ...prev, isPlaying: true, error: null }));
+    };
+
+    const onEnded = () => {
+      setState((prev) => ({
+        ...prev,
+        isPlaying: false,
+        currentTime: Number.isFinite(audio.duration) ? audio.duration : prev.currentTime
+      }));
     };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
     audio.addEventListener("pause", onPause);
     audio.addEventListener("play", onPlay);
+    audio.addEventListener("ended", onEnded);
 
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("ended", onEnded);
     };
   }, []);
 
@@ -76,6 +91,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     try {
       await audio.play();
     } catch (error) {
+      if (isIgnorablePlaybackError(error)) {
+        setState((prev) => ({ ...prev, isPlaying: false, error: null }));
+        return;
+      }
       const message = error instanceof Error ? error.message : "Unable to play audio";
       setState((prev) => ({ ...prev, isPlaying: false, error: message }));
     }
@@ -91,6 +110,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       try {
         await audio.play();
       } catch (error) {
+        if (isIgnorablePlaybackError(error)) {
+          setState((prev) => ({ ...prev, isPlaying: false, error: null }));
+          return;
+        }
         const message = error instanceof Error ? error.message : "Unable to play audio";
         setState((prev) => ({ ...prev, isPlaying: false, error: message }));
       }
@@ -108,14 +131,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, currentTime: Math.max(0, nextTime) }));
   }, []);
 
+  const closePlayer = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    setState({
+      sound: null,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      error: null
+    });
+  }, []);
+
   const value = useMemo<PlayerContextValue>(
     () => ({
       state,
       playSound,
       togglePlayPause,
-      seekTo
+      seekTo,
+      closePlayer
     }),
-    [playSound, seekTo, state, togglePlayPause]
+    [closePlayer, playSound, seekTo, state, togglePlayPause]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

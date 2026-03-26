@@ -1,0 +1,63 @@
+from datetime import datetime
+from typing import List, Optional, TypeVar, Generic
+
+from pydantic import BaseModel, ConfigDict
+
+
+class SoundFeatures(BaseModel):
+    spectral_centroid: Optional[float] = None
+    spectral_rolloff: Optional[float] = None
+    loudness_lufs: Optional[float] = None
+    rms: Optional[float] = None
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+    is_loop: Optional[bool] = None
+
+
+class SoundSummary(BaseModel):
+    id: int
+    name: str
+    author: Optional[str] = None
+    duration_sec: Optional[float] = None
+    tags: List[str] = []
+    license_label: Optional[str] = None
+    preview_url: Optional[str] = None
+    brightness: Optional[float] = None
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SoundDetail(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    author: Optional[str] = None
+    duration_sec: Optional[float] = None
+    sample_rate: Optional[int] = None
+    channels: Optional[int] = None
+    tags: List[str] = []
+    license_url: Optional[str] = None
+    license_label: Optional[str] = None
+    source: str
+    source_sound_id: str
+    source_page_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    file_url: Optional[str] = None
+    ingested_at: datetime
+    updated_at: datetime
+    features: Optional[SoundFeatures] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    page: int
+    page_size: int
+

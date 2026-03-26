@@ -48,7 +48,7 @@ cp .env.example .env
 Edit `.env`:
 
 - **`SYNTHBUD_DATABASE_URL`** – Postgres URL. Default:
-  `postgresql+psycopg2://postgres:postgres@localhost:5432/synthbud`
+  `postgresql+psycopg2://postgres:postgres@localhost:5433/synthbud`
 - **`SYNTHBUD_FREESOUND_API_TOKEN`** – Your Freesound API key (token authentication).
 
 **Security:** Never commit `.env` (it is in `.gitignore`). If your Freesound token was ever committed, revoke it at [freesound.org/home/applications/](https://freesound.org/home/applications/) and create a new one.
@@ -70,28 +70,28 @@ PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
 
 Or from inside `backend` (with `alembic.ini` in the same directory if you have a copy there, or using the path above from root).
 
-### Migration troubleshooting (`localhost:5432` + enum conflict)
+### Migration troubleshooting (`localhost:5433` + enum conflict)
 
 If migrations fail, two common issues are:
 
-- **Port ownership confusion on `localhost:5432`**
+- **Port ownership confusion on `localhost:5433`**
 - **Postgres enum conflict:** `type "ingestionstatusenum" already exists`
 
 Use this checklist:
 
-1. **Check what owns `5432`:**
+1. **Check what owns `5433`:**
 
 ```bash
-lsof -nP -iTCP:5432 -sTCP:LISTEN
+lsof -nP -iTCP:5433 -sTCP:LISTEN
 docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}'
 ```
 
-If you use this repo's Docker setup, `backend-postgres-1` binding `0.0.0.0:5432->5432/tcp` is expected.
+If you use this repo's Docker setup, `backend-postgres-1` binding `0.0.0.0:5433->5432/tcp` is expected.
 
 2. **Confirm your app points to the same DB in `backend/.env`:**
 
 ```env
-SYNTHBUD_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/synthbud
+SYNTHBUD_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/synthbud
 ```
 
 3. **Run migrations from repo root:**

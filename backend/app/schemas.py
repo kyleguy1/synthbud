@@ -22,6 +22,10 @@ class SoundSummary(BaseModel):
     tags: List[str] = []
     license_label: Optional[str] = None
     preview_url: Optional[str] = None
+    file_url: Optional[str] = None
+    source_page_url: Optional[str] = None
+    can_preview: bool = False
+    can_download: bool = False
     brightness: Optional[float] = None
     bpm: Optional[float] = None
     key: Optional[str] = None
@@ -60,4 +64,3 @@ class PaginatedResponse(BaseModel, Generic[T]):
     total: int
     page: int
     page_size: int
-

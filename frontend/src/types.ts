@@ -6,6 +6,10 @@ export interface SoundSummary {
   tags: string[];
   license_label: string | null;
   preview_url: string | null;
+  file_url: string | null;
+  source_page_url: string | null;
+  can_preview?: boolean;
+  can_download?: boolean;
   brightness: number | null;
   bpm: number | null;
   key: string | null;
@@ -45,6 +49,8 @@ export interface FavoriteSound {
   tags: string[];
   licenseLabel: string | null;
   previewUrl: string | null;
+  fileUrl: string | null;
+  canDownload?: boolean;
   sourceUrl: string | null;
 }
 

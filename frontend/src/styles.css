@@ -140,6 +140,20 @@ button:active:not(:disabled) {
   margin-bottom: 1.2rem;
 }
 
+.filter-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.filter-heading span {
+  color: #667781;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .range-input {
   display: grid;
   gap: 0.4rem;
@@ -156,16 +170,38 @@ button:active:not(:disabled) {
   gap: 0.4rem;
 }
 
+.tag-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
 .chip {
   border: 1px solid #b9d3df;
   border-radius: 999px;
-  padding: 0.3rem 0.7rem;
+  padding: 0.42rem 0.7rem;
   background: #f3fafe;
+  text-align: left;
+  justify-content: flex-start;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chip.selected {
   background: #0d3b3f;
   color: white;
+}
+
+.tag-list-toggle {
+  margin-top: 0.75rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2f6f96;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .sound-grid-section {
@@ -266,8 +302,9 @@ button:active:not(:disabled) {
 }
 
 .tags.collapsed {
-  max-height: 3.6rem;
+  max-height: 4.15rem;
   overflow: hidden;
+  padding-bottom: 0.1rem;
 }
 
 .tag-toggle {
@@ -282,6 +319,57 @@ button:active:not(:disabled) {
 
 .tag-toggle-spacer {
   min-height: 1.3rem;
+}
+
+.sound-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.download-link,
+.source-link,
+.download-unavailable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.download-link {
+  border-radius: 999px;
+  border: 1px solid #cfdbe4;
+  background: #f7fafc;
+  color: #244d68;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 37, 51, 0.04);
+}
+
+.download-link:hover,
+.source-link:hover {
+  background: #eef4f8;
+  border-color: #b9cad6;
+  text-decoration: none;
+}
+
+.source-link {
+  border: 1px solid #d7e0e7;
+  background: #ffffff;
+  color: #36586e;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 37, 51, 0.03);
+}
+
+.download-unavailable {
+  border: 1px solid #d8e0e6;
+  background: #f6f8fa;
+  color: #778791;
+  text-align: center;
 }
 
 .badge,

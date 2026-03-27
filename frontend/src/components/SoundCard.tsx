@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatDuration } from "../lib/format";
+import { canShowDownloadLink, getDownloadUrl, getFreesoundSourceUrl } from "../api/client";
 import type { SoundSummary } from "../types";
 
 interface SoundCardProps {
@@ -22,7 +22,11 @@ export function SoundCard({
   const tagsRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
-  const hasPreview = Boolean(sound.preview_url);
+  const [sourceCopied, setSourceCopied] = useState(false);
+  const hasPreview = sound.can_preview ?? true;
+  const hasDownload = canShowDownloadLink(sound.file_url, sound.can_download, sound.source_page_url);
+  const sourceLink = getFreesoundSourceUrl(sound.source_page_url, sound.author);
+  const showSourceLink = Boolean(sourceLink);
   const previewLabel = !hasPreview ? "No preview" : isActive ? (isPlaying ? "Pause" : "Resume") : "Play preview";
 
   useEffect(() => {
@@ -32,7 +36,11 @@ export function SoundCard({
         return;
       }
 
-      setHasOverflow(tagsElement.scrollHeight > tagsElement.clientHeight + 1);
+      const rowOffsets = Array.from(tagsElement.children)
+        .map((child) => (child as HTMLElement).offsetTop)
+        .filter((offset, index, offsets) => offsets.findIndex((value) => Math.abs(value - offset) <= 1) === index);
+
+      setHasOverflow(rowOffsets.length > 2);
     };
 
     updateOverflow();
@@ -51,10 +59,30 @@ export function SoundCard({
   }, [sound.tags]);
 
   useEffect(() => {
-    if (!hasOverflow && isExpanded) {
-      setIsExpanded(false);
+    setIsExpanded(false);
+  }, [sound.id]);
+
+  useEffect(() => {
+    if (!sourceCopied) {
+      return;
     }
-  }, [hasOverflow, isExpanded]);
+
+    const timeoutId = window.setTimeout(() => setSourceCopied(false), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [sourceCopied]);
+
+  const handleCopySourceLink = async () => {
+    if (!sourceLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sourceLink);
+      setSourceCopied(true);
+    } catch {
+      window.open(sourceLink, "_blank", "noopener,noreferrer");
+    }
+  };
 
   return (
     <article className={isActive ? "sound-card active" : "sound-card"}>
@@ -75,7 +103,6 @@ export function SoundCard({
 
       <div className="badges">
         <span className="badge">{sound.license_label || "Unknown"}</span>
-        <span className="badge">{formatDuration(sound.duration_sec)}</span>
       </div>
 
       <div className="sound-card-tags">
@@ -99,6 +126,35 @@ export function SoundCard({
         ) : (
           <div className="tag-toggle-spacer" aria-hidden="true" />
         )}
+      </div>
+
+      <div className="sound-card-actions">
+        {hasDownload ? (
+          <a
+            className="download-link"
+            href={getDownloadUrl(sound.id)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download WAV
+          </a>
+        ) : sound.file_url ? (
+          <span className="download-unavailable" aria-label="Download unavailable">
+            Download unavailable
+          </span>
+        ) : null}
+
+        {showSourceLink ? (
+          <button
+            type="button"
+            className="source-link"
+            onClick={() => {
+              void handleCopySourceLink();
+            }}
+          >
+            {sourceCopied ? "Link copied" : "Copy Freesound link"}
+          </button>
+        ) : null}
       </div>
 
       <button

@@ -492,6 +492,30 @@ button:active:not(:disabled) {
   padding: 1rem;
 }
 
+.presets-page {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.presets-controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.presets-controls input,
+.presets-controls select {
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #d0dde7;
+  border-radius: 10px;
+}
+
+.preset-card {
+  min-height: 180px;
+}
+
 .favorites-header {
   display: flex;
   justify-content: space-between;
@@ -552,5 +576,9 @@ button:active:not(:disabled) {
   .player-meta strong,
   .player-meta span {
     white-space: normal;
+  }
+
+  .presets-controls {
+    grid-template-columns: 1fr;
   }
 }

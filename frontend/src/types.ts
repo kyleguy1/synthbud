@@ -27,6 +27,54 @@ export interface PaginatedResponse<T> {
   page_size: number;
 }
 
+export interface PresetPackSummary {
+  id: number;
+  name: string;
+  author: string | null;
+  synth_name: string;
+  synth_vendor: string | null;
+  source_url: string | null;
+  license_label: string | null;
+  is_redistributable: boolean;
+  visibility: "public" | "private";
+}
+
+export interface PresetSummary {
+  id: number;
+  name: string;
+  author: string | null;
+  synth_name: string;
+  synth_vendor: string | null;
+  tags: string[];
+  visibility: "public" | "private";
+  is_redistributable: boolean;
+  parse_status: "pending" | "success" | "partial" | "failed";
+  source_url: string | null;
+  pack: PresetPackSummary;
+}
+
+export interface PresetDetail extends PresetSummary {
+  parse_error: string | null;
+  parser_version: string | null;
+  imported_at: string;
+  updated_at: string;
+  raw_payload: Record<string, unknown> | null;
+  macro_names: string[];
+  macro_values: Record<string, unknown> | null;
+  osc_count: number | null;
+  fx_enabled: boolean | null;
+  filter_enabled: boolean | null;
+}
+
+export interface PresetFilters {
+  q: string;
+  synth: string;
+  visibility: "" | "public" | "private";
+  redistributableOnly: boolean;
+  page: number;
+  pageSize: number;
+}
+
 export interface SearchFilters {
   q: string;
   tags: string[];

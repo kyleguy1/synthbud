@@ -61,6 +61,25 @@ class Settings(BaseSettings):
     feature_sample_rate: int = 22_050
     feature_batch_size: int = 16
 
+    # Preset ingestion
+    preset_local_roots: List[str] = Field(
+        default_factory=lambda: ["data/presets/local"],
+        description="Filesystem roots to scan for local user-owned preset libraries.",
+    )
+    preset_public_metadata_roots: List[str] = Field(
+        default_factory=lambda: ["data/presets/public/metadata"],
+        description="Filesystem roots to scan for curated public preset metadata JSON.",
+    )
+    preset_file_extensions_allowlist: List[str] = Field(
+        default_factory=lambda: [".fxp", ".fxb", ".serumpreset"],
+        description="Preset file extensions eligible for indexing/parsing.",
+    )
+    preset_public_source_allowlist: List[str] = Field(
+        default_factory=lambda: ["github.com", "gumroad.com", "patches.zone"],
+        description="Allowlisted domains for public preset metadata sources.",
+    )
+    enable_private_preset_ingestion: bool = True
+
     class Config:
         env_prefix = "SYNTHBUD_"
         env_file = ".env"

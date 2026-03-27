@@ -1,4 +1,12 @@
-import type { PaginatedResponse, SearchFilters, SoundDetail, SoundSummary } from "../types";
+import type {
+  PaginatedResponse,
+  PresetDetail,
+  PresetFilters,
+  PresetSummary,
+  SearchFilters,
+  SoundDetail,
+  SoundSummary
+} from "../types";
 import { toSearchParams } from "../lib/query";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -54,6 +62,33 @@ export async function listTags(): Promise<string[]> {
 
 export async function getSoundDetail(soundId: number): Promise<SoundDetail> {
   return request<SoundDetail>(`/api/sounds/${soundId}`);
+}
+
+export async function listPresets(filters: PresetFilters): Promise<PaginatedResponse<PresetSummary>> {
+  const params = new URLSearchParams();
+  if (filters.q.trim()) {
+    params.set("q", filters.q.trim());
+  }
+  if (filters.synth) {
+    params.append("synth", filters.synth);
+  }
+  if (filters.visibility) {
+    params.set("visibility", filters.visibility);
+  }
+  if (filters.redistributableOnly) {
+    params.set("redistributable", "true");
+  }
+  params.set("page", String(filters.page));
+  params.set("page_size", String(filters.pageSize));
+  return request<PaginatedResponse<PresetSummary>>(`/api/presets/?${params.toString()}`);
+}
+
+export async function getPresetDetail(presetId: number): Promise<PresetDetail> {
+  return request<PresetDetail>(`/api/presets/${presetId}`);
+}
+
+export async function listSynths(): Promise<string[]> {
+  return request<string[]>("/api/meta/synths");
 }
 
 export function getPlayableUrl(

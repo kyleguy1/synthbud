@@ -71,7 +71,7 @@ class Settings(BaseSettings):
         description="Filesystem roots to scan for curated public preset metadata JSON.",
     )
     preset_file_extensions_allowlist: List[str] = Field(
-        default_factory=lambda: [".fxp", ".fxb", ".serumpreset"],
+        default_factory=lambda: [".fxp", ".serumpreset"],
         description="Preset file extensions eligible for indexing/parsing.",
     )
     preset_public_source_allowlist: List[str] = Field(
@@ -79,6 +79,18 @@ class Settings(BaseSettings):
         description="Allowlisted domains for public preset metadata sources.",
     )
     enable_private_preset_ingestion: bool = True
+    presetshare_base_url: AnyHttpUrl = Field(
+        "https://presetshare.com",
+        description="Base URL for PresetShare scraper endpoints.",
+    )
+    presetshare_cache_ttl_seconds: int = Field(
+        3600,
+        description="Cache TTL in seconds for PresetShare list scrape responses.",
+    )
+    presetshare_min_request_interval_seconds: float = Field(
+        1.0,
+        description="Minimum interval between outgoing PresetShare requests.",
+    )
 
     class Config:
         env_prefix = "SYNTHBUD_"

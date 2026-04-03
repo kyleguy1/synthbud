@@ -20,7 +20,8 @@ from app.models import (
 )
 
 
-SERUM_FILE_HINT_RE = re.compile(r"(serum|\.fxp$|\.fxb$|\.serumpreset$)", re.IGNORECASE)
+SERUM_FILE_HINT_RE = re.compile(r"(serum|\.fxp$|\.serumpreset$)", re.IGNORECASE)
+LOCAL_EXTERNAL_ID_RE = re.compile(r"^local:[a-z0-9-]+:.+$")
 
 
 @dataclass
@@ -99,6 +100,26 @@ def get_or_create_preset_pack(
         query = query.filter(PresetPack.name == name, PresetPack.synth_name == synth_name)
 
     pack = query.first()
+    if (
+        pack is None
+        and external_id
+        and source.source_type == "local"
+        and LOCAL_EXTERNAL_ID_RE.match(external_id)
+    ):
+        legacy_pack = (
+            db.query(PresetPack)
+            .filter(
+                PresetPack.source_id == source.id,
+                PresetPack.name == name,
+                PresetPack.synth_name == synth_name,
+            )
+            .first()
+        )
+        if legacy_pack is not None and legacy_pack.external_id != external_id:
+            legacy_pack.external_id = external_id
+            legacy_pack.updated_at = datetime.now(UTC)
+            pack = legacy_pack
+
     if pack is None:
         pack = PresetPack(
             source_id=source.id,
@@ -208,7 +229,10 @@ def upsert_preset_file(
 ) -> PresetFile:
     preset_file = (
         db.query(PresetFile)
-        .filter(PresetFile.file_hash_sha256 == file_hash_sha256)
+        .filter(
+            PresetFile.preset_id == preset.id,
+            PresetFile.file_hash_sha256 == file_hash_sha256,
+        )
         .first()
     )
     if preset_file is None:

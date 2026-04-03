@@ -44,9 +44,14 @@ describe("SoundCard", () => {
     expect(screen.getByText("Bright Pluck")).toBeInTheDocument();
     expect(screen.getByText("Kai")).toBeInTheDocument();
     expect(screen.getByText("CC0")).toBeInTheDocument();
-    expect(screen.queryByText("0:02")).not.toBeInTheDocument();
+    expect(screen.getByText("Duration")).toBeInTheDocument();
+    expect(screen.getByText("0:02")).toBeInTheDocument();
+    expect(screen.getByText("Brightness")).toBeInTheDocument();
+    expect(screen.getByText("3200 Hz")).toBeInTheDocument();
+    expect(screen.getByText("BPM")).toBeInTheDocument();
+    expect(screen.getByText("120")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Download WAV" })).toHaveAttribute("href", "http://localhost:8000/api/sounds/1/download");
-    expect(screen.getByRole("button", { name: "Copy Freesound link" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View on Freesound" })).toHaveAttribute("href", "https://freesound.org/people/Kai/sounds/1/");
 
     await user.click(screen.getByRole("button", { name: "Play preview" }));
     expect(onPreviewToggle).toHaveBeenCalledWith(sound);
@@ -147,22 +152,13 @@ describe("SoundCard", () => {
     );
 
     expect(screen.queryByRole("link", { name: "Download WAV" })).not.toBeInTheDocument();
-    expect(screen.getByText("Download unavailable")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy Freesound link" })).toBeInTheDocument();
+    expect(screen.queryByText("Download unavailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View on Freesound" })).toBeInTheDocument();
   });
 
-  it("copies the normalized Freesound source link", async () => {
-    const user = userEvent.setup();
+  it("renders the normalized Freesound source link", () => {
     const onPreviewToggle = vi.fn();
     const onFavorite = vi.fn();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText
-      }
-    });
 
     render(
       <SoundCard
@@ -179,9 +175,9 @@ describe("SoundCard", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Copy Freesound link" }));
-
-    expect(writeText).toHaveBeenCalledWith("https://freesound.org/people/Kai/sounds/661100/");
-    expect(screen.getByRole("button", { name: "Link copied" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View on Freesound" })).toHaveAttribute(
+      "href",
+      "https://freesound.org/people/Kai/sounds/661100/"
+    );
   });
 });

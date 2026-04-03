@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { canShowDownloadLink, getFreesoundSourceUrl } from "../api/client";
 import { downloadCredits } from "../lib/credits";
 import { formatDuration } from "../lib/format";
@@ -8,25 +7,6 @@ import { usePlayer } from "../state/PlayerContext";
 export function FavoritesPage() {
   const { favorites, removeFavorite } = useFavorites();
   const { state: playerState, playSound, togglePlayPause } = usePlayer();
-  const [copiedSoundId, setCopiedSoundId] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (copiedSoundId === null) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setCopiedSoundId(null), 1800);
-    return () => window.clearTimeout(timeoutId);
-  }, [copiedSoundId]);
-
-  const handleCopySourceLink = async (sourceLink: string, soundId: number) => {
-    try {
-      await navigator.clipboard.writeText(sourceLink);
-      setCopiedSoundId(soundId);
-    } catch {
-      window.open(sourceLink, "_blank", "noopener,noreferrer");
-    }
-  };
 
   return (
     <main className="favorites-page">
@@ -43,41 +23,39 @@ export function FavoritesPage() {
         {favorites.map((sound) => {
           const isActive = playerState.sound?.id === sound.id;
           const hasDownload = canShowDownloadLink(sound.fileUrl, sound.canDownload, sound.sourceUrl);
-          const sourceLink = getFreesoundSourceUrl(sound.sourceUrl, sound.author);
+          const sourceLink = getFreesoundSourceUrl(sound.sourceUrl, sound.author) ?? undefined;
           const label = !sound.previewUrl ? "No preview" : isActive ? (playerState.isPlaying ? "Pause" : "Resume") : "Play preview";
 
           return (
             <li key={sound.id} className="favorite-row">
-              <div>
+              <div className="favorite-copy">
                 <strong>{sound.name}</strong>
                 <p>{sound.author || "Unknown creator"}</p>
-                <p>{sound.licenseLabel || "Unknown license"} • {formatDuration(sound.durationSec)}</p>
+                <p>{formatDuration(sound.durationSec)}</p>
+                <div className="favorite-badges">
+                  <span className="badge">{sound.licenseLabel || "Unknown license"}</span>
+                </div>
               </div>
               <div className="favorite-actions">
                 {hasDownload ? (
                   <a
                     className="download-link"
-                    href={sound.fileUrl}
+                    href={sound.fileUrl ?? undefined}
                     target="_blank"
                     rel="noreferrer"
                   >
                     Download WAV
                   </a>
-                ) : sound.fileUrl ? (
-                  <span className="download-unavailable" aria-label="Download unavailable">
-                    Download unavailable
-                  </span>
                 ) : null}
                 {sourceLink ? (
-                  <button
-                    type="button"
+                  <a
                     className="source-link"
-                    onClick={() => {
-                      void handleCopySourceLink(sourceLink, sound.id);
-                    }}
+                    href={sourceLink}
+                    target="_blank"
+                    rel="noreferrer"
                   >
-                    {copiedSoundId === sound.id ? "Link copied" : "Copy Freesound link"}
-                  </button>
+                    View on Freesound
+                  </a>
                 ) : null}
                 <button
                   type="button"
@@ -93,7 +71,11 @@ export function FavoritesPage() {
                 >
                   {label}
                 </button>
-                <button type="button" onClick={() => removeFavorite(sound.id)}>
+                <button
+                  type="button"
+                  className="favorite-remove"
+                  onClick={() => removeFavorite(sound.id)}
+                >
                   Remove
                 </button>
               </div>

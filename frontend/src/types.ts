@@ -37,12 +37,14 @@ export interface PresetPackSummary {
   license_label: string | null;
   is_redistributable: boolean;
   visibility: "public" | "private";
+  source_key?: string | null;
 }
 
 export interface PresetSummary {
   id: number;
   name: string;
   author: string | null;
+  author_url?: string | null;
   synth_name: string;
   synth_vendor: string | null;
   tags: string[];
@@ -50,6 +52,11 @@ export interface PresetSummary {
   is_redistributable: boolean;
   parse_status: "pending" | "success" | "partial" | "failed";
   source_url: string | null;
+  source_key?: string | null;
+  posted_label?: string | null;
+  like_count?: number | null;
+  download_count?: number | null;
+  comment_count?: number | null;
   pack: PresetPackSummary;
 }
 
@@ -69,6 +76,10 @@ export interface PresetDetail extends PresetSummary {
 export interface PresetFilters {
   q: string;
   synth: string;
+  genre: string;
+  type: string;
+  pack: string;
+  source: "local-filesystem" | "presetshare";
   visibility: "" | "public" | "private";
   redistributableOnly: boolean;
   page: number;

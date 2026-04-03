@@ -66,6 +66,7 @@ class PresetPackSummary(BaseModel):
     license_label: Optional[str] = None
     is_redistributable: bool = False
     visibility: str
+    source_key: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,6 +75,7 @@ class PresetSummary(BaseModel):
     id: int
     name: str
     author: Optional[str] = None
+    author_url: Optional[str] = None
     synth_name: str
     synth_vendor: Optional[str] = None
     tags: List[str] = []
@@ -81,6 +83,11 @@ class PresetSummary(BaseModel):
     is_redistributable: bool = False
     parse_status: str
     source_url: Optional[str] = None
+    source_key: Optional[str] = None
+    posted_label: Optional[str] = None
+    like_count: Optional[int] = None
+    download_count: Optional[int] = None
+    comment_count: Optional[int] = None
     pack: PresetPackSummary
 
     model_config = ConfigDict(from_attributes=True)

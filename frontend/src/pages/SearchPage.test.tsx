@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { SearchPage } from "./SearchPage";
 import { ApiError } from "../api/client";
@@ -67,6 +68,54 @@ describe("SearchPage states", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/No sounds found for current filters/i)).toBeInTheDocument();
+    });
+  });
+
+  it("passes duration, brightness, and bpm filters into the sounds request", async () => {
+    const user = userEvent.setup();
+    mockListSounds.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(mockListSounds).toHaveBeenCalled();
+    });
+
+    mockListSounds.mockClear();
+
+    const [
+      minDurationInput,
+      maxDurationInput,
+      minBrightnessInput,
+      maxBrightnessInput,
+      minBpmInput,
+      maxBpmInput
+    ] = screen.getAllByRole("spinbutton");
+
+    await user.type(minDurationInput, "5");
+    await user.type(maxDurationInput, "12");
+
+    await user.type(minBrightnessInput, "3200");
+    await user.type(maxBrightnessInput, "5600");
+    await user.type(minBpmInput, "90");
+    await user.type(maxBpmInput, "128");
+
+    await waitFor(() => {
+      expect(mockListSounds).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          minDuration: 5,
+          maxDuration: 12,
+          minBrightness: 3200,
+          maxBrightness: 5600,
+          bpmMin: 90,
+          bpmMax: 128
+        })
+      );
     });
   });
 });

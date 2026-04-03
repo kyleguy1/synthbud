@@ -4,8 +4,17 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
-from app.models import Preset, PresetPack, PresetParameters, PresetVisibilityEnum
+from app.models import Preset, PresetPack, PresetParameters, PresetSource, PresetVisibilityEnum
+from app.scrapers.presetshare import (
+    clear_cache as clear_presetshare_cache,
+    build_cache_key as build_presetshare_cache_key,
+    resolve_genre_id,
+    resolve_sound_type_id,
+    resolve_synth_id,
+    scrape_presets,
+)
 from app.schemas import PaginatedResponse, PresetDetail, PresetPackSummary, PresetSummary
 
 
@@ -16,6 +25,9 @@ router = APIRouter(prefix="/api/presets", tags=["presets"])
 def list_presets(
     q: Optional[str] = Query(None, description="Free-text query for preset name/author."),
     synth: Optional[List[str]] = Query(None, description="Synth names, e.g. serum, vital."),
+    genre: Optional[str] = Query(None, description="Genre name, e.g. Dubstep."),
+    type: Optional[str] = Query(None, description="Sound type name, e.g. Lead."),
+    source: Optional[str] = Query(None, description="Preset source provider key."),
     pack: Optional[List[str]] = Query(None, description="Pack name(s)."),
     author: Optional[List[str]] = Query(None, description="Author name(s)."),
     visibility: Optional[str] = Query(None, pattern="^(public|private)$"),
@@ -24,7 +36,74 @@ def list_presets(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedResponse[PresetSummary]:
-    stmt = select(Preset, PresetPack).join(PresetPack, Preset.pack_id == PresetPack.id)
+    if source and source.strip().lower() == "presetshare":
+        settings = get_settings()
+        synth_name = synth[0] if synth else None
+        synth_id = resolve_synth_id(synth_name)
+        genre_id = resolve_genre_id(genre)
+        sound_type_id = resolve_sound_type_id(type)
+
+        scraped = scrape_presets(
+            instrument=synth_id,
+            genre=genre_id,
+            sound_type=sound_type_id,
+            page=page,
+            limit=page_size,
+            cache_ttl_seconds=settings.presetshare_cache_ttl_seconds,
+            min_request_interval_seconds=settings.presetshare_min_request_interval_seconds,
+        )
+        if q:
+            q_lower = q.lower()
+            scraped = [
+                item
+                for item in scraped
+                if q_lower in (item.get("name") or "").lower()
+                or q_lower in (item.get("author") or "").lower()
+            ]
+
+        items: List[PresetSummary] = []
+        for item in scraped:
+            fallback_id = int(item["id"]) if item["id"].isdigit() else 0
+            pack_name = f'{item.get("synth") or "PresetShare"} Presets'
+            items.append(
+                PresetSummary(
+                    id=fallback_id,
+                    name=item.get("name") or f"Preset {item['id']}",
+                    author=item.get("author"),
+                    author_url=item.get("authorUrl"),
+                    synth_name=item.get("synth") or "Unknown",
+                    synth_vendor=None,
+                    tags=[value for value in [item.get("genre"), item.get("soundType")] if value],
+                    visibility="public",
+                    is_redistributable=True,
+                    parse_status="success",
+                    source_url=item.get("url"),
+                    source_key="presetshare",
+                    posted_label=item.get("datePosted"),
+                    like_count=item.get("likes"),
+                    download_count=item.get("downloads"),
+                    comment_count=item.get("comments"),
+                    pack=PresetPackSummary(
+                        id=fallback_id,
+                        name=pack_name,
+                        author=item.get("author"),
+                        synth_name=item.get("synth") or "Unknown",
+                        synth_vendor=None,
+                        source_url=item.get("url"),
+                        license_label=None,
+                        is_redistributable=True,
+                        visibility="public",
+                        source_key="presetshare",
+                    ),
+                )
+            )
+        return PaginatedResponse[PresetSummary](items=items, total=len(items), page=page, page_size=page_size)
+
+    stmt = (
+        select(Preset, PresetPack, PresetSource)
+        .join(PresetPack, Preset.pack_id == PresetPack.id)
+        .join(PresetSource, PresetPack.source_id == PresetSource.id)
+    )
     conditions = []
 
     if q:
@@ -46,6 +125,8 @@ def list_presets(
         conditions.append(Preset.visibility == PresetVisibilityEnum(visibility))
     if redistributable is not None:
         conditions.append(Preset.is_redistributable.is_(redistributable))
+    if source:
+        conditions.append(PresetSource.key == source)
 
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -58,6 +139,7 @@ def list_presets(
             id=preset.id,
             name=preset.name,
             author=preset.author,
+            author_url=None,
             synth_name=preset.synth_name,
             synth_vendor=preset.synth_vendor,
             tags=preset.tags or [],
@@ -65,6 +147,11 @@ def list_presets(
             is_redistributable=preset.is_redistributable,
             parse_status=preset.parse_status.value,
             source_url=preset.source_url,
+            source_key=preset_source.key,
+            posted_label=None,
+            like_count=None,
+            download_count=None,
+            comment_count=None,
             pack=PresetPackSummary(
                 id=pack.id,
                 name=pack.name,
@@ -75,9 +162,10 @@ def list_presets(
                 license_label=pack.license_label,
                 is_redistributable=pack.is_redistributable,
                 visibility=pack.visibility.value,
+                source_key=preset_source.key,
             ),
         )
-        for preset, pack in rows
+        for preset, pack, preset_source in rows
     ]
 
     return PaginatedResponse[PresetSummary](items=items, total=total, page=page, page_size=page_size)
@@ -89,19 +177,21 @@ def get_preset_detail(
     db: Session = Depends(get_db),
 ) -> PresetDetail:
     row = db.execute(
-        select(Preset, PresetPack, PresetParameters)
+        select(Preset, PresetPack, PresetParameters, PresetSource)
         .join(PresetPack, Preset.pack_id == PresetPack.id)
+        .join(PresetSource, PresetPack.source_id == PresetSource.id)
         .outerjoin(PresetParameters, Preset.id == PresetParameters.preset_id)
         .where(Preset.id == preset_id)
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Preset not found")
 
-    preset, pack, parameters = row
+    preset, pack, parameters, preset_source = row
     return PresetDetail(
         id=preset.id,
         name=preset.name,
         author=preset.author,
+        author_url=None,
         synth_name=preset.synth_name,
         synth_vendor=preset.synth_vendor,
         tags=preset.tags or [],
@@ -109,6 +199,11 @@ def get_preset_detail(
         is_redistributable=preset.is_redistributable,
         parse_status=preset.parse_status.value,
         source_url=preset.source_url,
+        source_key=preset_source.key,
+        posted_label=None,
+        like_count=None,
+        download_count=None,
+        comment_count=None,
         parse_error=preset.parse_error,
         parser_version=preset.parser_version,
         imported_at=preset.imported_at,
@@ -129,5 +224,31 @@ def get_preset_detail(
             license_label=pack.license_label,
             is_redistributable=pack.is_redistributable,
             visibility=pack.visibility.value,
+            source_key=preset_source.key,
         ),
     )
+
+
+@router.post("/cache-bust")
+def clear_presets_cache(
+    source: str = Query("presetshare"),
+    instrument: Optional[int] = Query(None),
+    genre: Optional[int] = Query(None),
+    type: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+) -> dict:
+    if source.strip().lower() != "presetshare":
+        raise HTTPException(status_code=400, detail="Only presetshare cache busting is supported.")
+
+    removed = 0
+    if instrument is None and genre is None and type is None:
+        removed = clear_presetshare_cache()
+    else:
+        key = build_presetshare_cache_key(
+            instrument=instrument,
+            genre=genre,
+            sound_type=type,
+            page=page,
+        )
+        removed = clear_presetshare_cache(key)
+    return {"source": "presetshare", "removed": removed}

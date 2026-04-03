@@ -143,24 +143,30 @@ interface RangeInputProps {
   min: number;
   max: number;
   step: number;
+  unit?: string;
   onChange: (value: number | undefined) => void;
 }
 
-function RangeInput({ label, value, min, max, step, onChange }: RangeInputProps) {
+function RangeInput({ label, value, min, max, step, unit, onChange }: RangeInputProps) {
   return (
     <label className="range-input">
-      <span>{label}: {value ?? "Any"}</span>
+      <span>{label}</span>
       <input
-        type="range"
+        type="number"
         min={min}
         max={max}
         step={step}
-        value={value ?? min}
-        onChange={(event) => onChange(Number(event.target.value))}
+        value={value ?? ""}
+        placeholder={`Any${unit ? ` ${unit}` : ""}`}
+        inputMode="decimal"
+        onChange={(event) => {
+          const nextValue = event.target.value.trim();
+          onChange(nextValue === "" ? undefined : Number(nextValue));
+        }}
       />
-      <button type="button" className="clear-button" onClick={() => onChange(undefined)}>
-        Clear
-      </button>
+      <small>
+        Range: {min} to {max}{unit ? ` ${unit}` : ""}
+      </small>
     </label>
   );
 }

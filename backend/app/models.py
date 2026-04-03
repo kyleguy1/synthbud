@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -267,7 +268,7 @@ class PresetParameters(Base):
 class PresetFile(Base):
     __tablename__ = "preset_files"
     __table_args__ = (
-        UniqueConstraint("file_hash_sha256", name="uq_preset_files_hash"),
+        Index("ix_preset_files_hash_sha256", "file_hash_sha256"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

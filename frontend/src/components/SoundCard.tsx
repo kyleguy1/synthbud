@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { canShowDownloadLink, getDownloadUrl, getFreesoundSourceUrl } from "../api/client";
+import { formatDuration } from "../lib/format";
 import type { SoundSummary } from "../types";
 
 interface SoundCardProps {
@@ -22,12 +23,16 @@ export function SoundCard({
   const tagsRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
-  const [sourceCopied, setSourceCopied] = useState(false);
   const hasPreview = sound.can_preview ?? true;
   const hasDownload = canShowDownloadLink(sound.file_url, sound.can_download, sound.source_page_url);
   const sourceLink = getFreesoundSourceUrl(sound.source_page_url, sound.author);
   const showSourceLink = Boolean(sourceLink);
   const previewLabel = !hasPreview ? "No preview" : isActive ? (isPlaying ? "Pause" : "Resume") : "Play preview";
+  const soundMeta = [
+    { label: "Duration", value: sound.duration_sec != null ? formatDuration(sound.duration_sec) : null },
+    { label: "Brightness", value: sound.brightness != null ? `${Math.round(sound.brightness)} Hz` : null },
+    { label: "BPM", value: sound.bpm != null ? String(Math.round(sound.bpm)) : null }
+  ].filter((item) => item.value);
 
   useEffect(() => {
     const updateOverflow = () => {
@@ -62,28 +67,6 @@ export function SoundCard({
     setIsExpanded(false);
   }, [sound.id]);
 
-  useEffect(() => {
-    if (!sourceCopied) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setSourceCopied(false), 1800);
-    return () => window.clearTimeout(timeoutId);
-  }, [sourceCopied]);
-
-  const handleCopySourceLink = async () => {
-    if (!sourceLink) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(sourceLink);
-      setSourceCopied(true);
-    } catch {
-      window.open(sourceLink, "_blank", "noopener,noreferrer");
-    }
-  };
-
   return (
     <article className={isActive ? "sound-card active" : "sound-card"}>
       <div className="sound-card-header">
@@ -103,6 +86,12 @@ export function SoundCard({
 
       <div className="badges">
         <span className="badge">{sound.license_label || "Unknown"}</span>
+        {soundMeta.map((item) => (
+          <span key={item.label} className="badge sound-meta-badge">
+            <span className="sound-meta-label">{item.label}</span>
+            <span className="sound-meta-value">{item.value}</span>
+          </span>
+        ))}
       </div>
 
       <div className="sound-card-tags">
@@ -138,22 +127,17 @@ export function SoundCard({
           >
             Download WAV
           </a>
-        ) : sound.file_url ? (
-          <span className="download-unavailable" aria-label="Download unavailable">
-            Download unavailable
-          </span>
         ) : null}
 
         {showSourceLink ? (
-          <button
-            type="button"
+          <a
             className="source-link"
-            onClick={() => {
-              void handleCopySourceLink();
-            }}
+            href={sourceLink ?? undefined}
+            target="_blank"
+            rel="noreferrer"
           >
-            {sourceCopied ? "Link copied" : "Copy Freesound link"}
-          </button>
+            View on Freesound
+          </a>
         ) : null}
       </div>
 

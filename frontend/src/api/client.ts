@@ -69,8 +69,20 @@ export async function listPresets(filters: PresetFilters): Promise<PaginatedResp
   if (filters.q.trim()) {
     params.set("q", filters.q.trim());
   }
+  if (filters.genre) {
+    params.set("genre", filters.genre);
+  }
+  if (filters.type) {
+    params.set("type", filters.type);
+  }
+  if (filters.pack) {
+    params.append("pack", filters.pack);
+  }
   if (filters.synth) {
     params.append("synth", filters.synth);
+  }
+  if (filters.source) {
+    params.set("source", filters.source);
   }
   if (filters.visibility) {
     params.set("visibility", filters.visibility);
@@ -87,8 +99,46 @@ export async function getPresetDetail(presetId: number): Promise<PresetDetail> {
   return request<PresetDetail>(`/api/presets/${presetId}`);
 }
 
-export async function listSynths(): Promise<string[]> {
-  return request<string[]>("/api/meta/synths");
+export async function listSynths(source?: string): Promise<string[]> {
+  const params = new URLSearchParams();
+  if (source) {
+    params.set("source", source);
+  }
+  const suffix = params.toString();
+  return request<string[]>(`/api/meta/synths${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function listPresetPacks(filters: {
+  source?: string;
+  synth?: string;
+}): Promise<string[]> {
+  const params = new URLSearchParams();
+  if (filters.source) {
+    params.set("source", filters.source);
+  }
+  if (filters.synth) {
+    params.set("synth", filters.synth);
+  }
+  const suffix = params.toString();
+  return request<string[]>(`/api/meta/preset-packs${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function listPresetGenres(source?: string): Promise<string[]> {
+  const params = new URLSearchParams();
+  if (source) {
+    params.set("source", source);
+  }
+  const suffix = params.toString();
+  return request<string[]>(`/api/meta/preset-genres${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function listPresetTypes(source?: string): Promise<string[]> {
+  const params = new URLSearchParams();
+  if (source) {
+    params.set("source", source);
+  }
+  const suffix = params.toString();
+  return request<string[]>(`/api/meta/preset-types${suffix ? `?${suffix}` : ""}`);
 }
 
 export function getPlayableUrl(

@@ -12,6 +12,7 @@ describe("buildCreditsText", () => {
         tags: [],
         licenseLabel: "CC-BY",
         previewUrl: "https://example.com/lead.mp3",
+        fileUrl: null,
         sourceUrl: "https://example.com/source"
       }
     ];

@@ -1,4 +1,4 @@
-import { getPlayableUrl } from "../api/client";
+import { canShowDownloadLink, getDownloadUrl, getPlayableUrl, isUnavailableDownloadUrl } from "../api/client";
 import type { FavoriteSound, SoundSummary } from "../types";
 
 const STORAGE_KEY = "synthbud-favorites";
@@ -16,7 +16,11 @@ export function loadFavorites(): FavoriteSound[] {
     }
     return parsed.map((sound) => ({
       ...sound,
-      previewUrl: sound.previewUrl || getPlayableUrl(sound.id, null),
+      previewUrl: isUnavailableDownloadUrl(sound.previewUrl)
+        ? getPlayableUrl(sound.id, null)
+        : (sound.previewUrl || getPlayableUrl(sound.id, null)),
+      fileUrl: canShowDownloadLink(sound.fileUrl, sound.canDownload, sound.sourceUrl) ? getDownloadUrl(sound.id) : null,
+      canDownload: canShowDownloadLink(sound.fileUrl, sound.canDownload, sound.sourceUrl),
     }));
   } catch {
     return [];
@@ -48,6 +52,8 @@ export function soundSummaryToFavorite(sound: SoundSummary): FavoriteSound {
     tags: sound.tags,
     licenseLabel: sound.license_label,
     previewUrl: getPlayableUrl(sound.id, sound.preview_url),
-    sourceUrl: null
+    fileUrl: canShowDownloadLink(sound.file_url, sound.can_download, sound.source_page_url) ? getDownloadUrl(sound.id) : null,
+    canDownload: canShowDownloadLink(sound.file_url, sound.can_download, sound.source_page_url),
+    sourceUrl: sound.source_page_url
   };
 }

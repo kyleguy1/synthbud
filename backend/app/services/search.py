@@ -36,6 +36,7 @@ def build_sound_search_query(
         conditions.append(
             or_(
                 func.lower(Sound.name).like(pattern),
+                func.lower(func.coalesce(Sound.author, "")).like(pattern),
                 func.lower(func.coalesce(Sound.description, "")).like(pattern),
                 func.array_to_string(
                     func.coalesce(Sound.tags, []), " ", type_=String
@@ -82,4 +83,3 @@ def build_sound_search_query(
     ).scalar_one()
 
     return stmt, total
-

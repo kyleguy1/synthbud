@@ -8,7 +8,13 @@ from .config import get_settings
 
 settings = get_settings()
 
-engine = create_engine(settings.database_url, future=True)
+try:
+    engine = create_engine(settings.database_url, future=True)
+except ModuleNotFoundError as exc:
+    if "psycopg2" not in str(exc):
+        raise
+    # Test environments may not have Postgres driver installed.
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 Base = declarative_base()

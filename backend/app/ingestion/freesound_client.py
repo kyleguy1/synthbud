@@ -20,7 +20,7 @@ class FreesoundClient:
     """
 
     api_token: str
-    timeout: float = 10.0
+    timeout: float = 20.0
 
     @classmethod
     def from_settings(cls) -> "FreesoundClient":
@@ -35,6 +35,7 @@ class FreesoundClient:
             base_url=FREESOUND_BASE_URL,
             headers=self._get_headers(),
             timeout=self.timeout,
+            trust_env=False,
         )
 
     def search_text(
@@ -113,4 +114,3 @@ class FreesoundClient:
 
             page += 1
             pages_yielded += 1
-

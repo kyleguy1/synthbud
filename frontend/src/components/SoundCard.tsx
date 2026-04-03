@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { canShowDownloadLink, getDownloadUrl, getFreesoundSourceUrl } from "../api/client";
 import { formatDuration } from "../lib/format";
 import type { SoundSummary } from "../types";
 
@@ -18,8 +20,52 @@ export function SoundCard({
   onToggleFavorite,
   onPreviewToggle
 }: SoundCardProps) {
-  const hasPreview = Boolean(sound.preview_url);
+  const tagsRef = useRef<HTMLDivElement | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const hasPreview = sound.can_preview ?? true;
+  const hasDownload = canShowDownloadLink(sound.file_url, sound.can_download, sound.source_page_url);
+  const sourceLink = getFreesoundSourceUrl(sound.source_page_url, sound.author);
+  const showSourceLink = Boolean(sourceLink);
   const previewLabel = !hasPreview ? "No preview" : isActive ? (isPlaying ? "Pause" : "Resume") : "Play preview";
+  const soundMeta = [
+    { label: "Duration", value: sound.duration_sec != null ? formatDuration(sound.duration_sec) : null },
+    { label: "Brightness", value: sound.brightness != null ? `${Math.round(sound.brightness)} Hz` : null },
+    { label: "BPM", value: sound.bpm != null ? String(Math.round(sound.bpm)) : null }
+  ].filter((item) => item.value);
+
+  useEffect(() => {
+    const updateOverflow = () => {
+      const tagsElement = tagsRef.current;
+      if (!tagsElement) {
+        return;
+      }
+
+      const rowOffsets = Array.from(tagsElement.children)
+        .map((child) => (child as HTMLElement).offsetTop)
+        .filter((offset, index, offsets) => offsets.findIndex((value) => Math.abs(value - offset) <= 1) === index);
+
+      setHasOverflow(rowOffsets.length > 2);
+    };
+
+    updateOverflow();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateOverflow);
+      return () => window.removeEventListener("resize", updateOverflow);
+    }
+
+    const observer = new ResizeObserver(() => updateOverflow());
+    if (tagsRef.current) {
+      observer.observe(tagsRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [sound.tags]);
+
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [sound.id]);
 
   return (
     <article className={isActive ? "sound-card active" : "sound-card"}>
@@ -40,13 +86,59 @@ export function SoundCard({
 
       <div className="badges">
         <span className="badge">{sound.license_label || "Unknown"}</span>
-        <span className="badge">{formatDuration(sound.duration_sec)}</span>
+        {soundMeta.map((item) => (
+          <span key={item.label} className="badge sound-meta-badge">
+            <span className="sound-meta-label">{item.label}</span>
+            <span className="sound-meta-value">{item.value}</span>
+          </span>
+        ))}
       </div>
 
-      <div className="tags">
-        {sound.tags.map((tag) => (
-          <span className="tag" key={tag}>{tag}</span>
-        ))}
+      <div className="sound-card-tags">
+        <div
+          ref={tagsRef}
+          className={isExpanded ? "tags expanded" : "tags collapsed"}
+        >
+          {sound.tags.map((tag) => (
+            <span className="tag" key={tag}>{tag}</span>
+          ))}
+        </div>
+
+        {hasOverflow ? (
+          <button
+            type="button"
+            className="tag-toggle"
+            onClick={() => setIsExpanded((prev) => !prev)}
+          >
+            {isExpanded ? "Show less" : "Learn more"}
+          </button>
+        ) : (
+          <div className="tag-toggle-spacer" aria-hidden="true" />
+        )}
+      </div>
+
+      <div className="sound-card-actions">
+        {hasDownload ? (
+          <a
+            className="download-link"
+            href={getDownloadUrl(sound.id)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download WAV
+          </a>
+        ) : null}
+
+        {showSourceLink ? (
+          <a
+            className="source-link"
+            href={sourceLink ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on Freesound
+          </a>
+        ) : null}
       </div>
 
       <button

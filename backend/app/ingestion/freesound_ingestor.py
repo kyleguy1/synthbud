@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from datetime import UTC, datetime
+import re
 from typing import Iterable, List
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,9 @@ SEARCH_QUERIES: List[str] = [
     "keys",
     "pad",
 ]
+
+FREESOUND_OWNER_SOUND_RE = re.compile(r"^/people/(?P<owner>[^/]+)/sounds/(?P<sound_id>\d+)/?$")
+FREESOUND_API_SOUND_RE = re.compile(r"^/apiv2/sounds/(?P<sound_id>\d+)/?$")
 
 
 @contextmanager
@@ -61,6 +66,43 @@ def extract_author(payload: dict) -> str | None:
     return payload.get("username") or (payload.get("user") or {}).get("username")
 
 
+def normalize_freesound_source_page_url(
+    source_page_url: str | None,
+    *,
+    sound_id: str | int | None = None,
+    author: str | None = None,
+) -> str | None:
+    if not source_page_url and not sound_id:
+        return None
+
+    parsed = urlparse((source_page_url or "").strip())
+    path = parsed.path or ""
+
+    if parsed.netloc and "freesound.org" not in parsed.netloc:
+        return source_page_url
+
+    owner_match = FREESOUND_OWNER_SOUND_RE.match(path)
+    if owner_match:
+        owner = owner_match.group("owner")
+        normalized_sound_id = owner_match.group("sound_id")
+        return f"https://freesound.org/people/{owner}/sounds/{normalized_sound_id}/"
+
+    api_match = FREESOUND_API_SOUND_RE.match(path)
+    if api_match:
+        normalized_sound_id = api_match.group("sound_id")
+        if author:
+            return f"https://freesound.org/people/{author}/sounds/{normalized_sound_id}/"
+        return f"https://freesound.org/sounds/{normalized_sound_id}/"
+
+    if sound_id and author:
+        return f"https://freesound.org/people/{author}/sounds/{sound_id}/"
+
+    if source_page_url:
+        return source_page_url
+
+    return None
+
+
 def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
     source = "freesound"
     source_sound_id = str(payload["id"])
@@ -84,12 +126,16 @@ def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
 
     sound.preview_url = extract_preview_url(payload)
     sound.file_url = payload.get("download")
-    sound.source_page_url = payload.get("url")
+    sound.author = extract_author(payload)
+    sound.source_page_url = normalize_freesound_source_page_url(
+        payload.get("url"),
+        sound_id=source_sound_id,
+        author=sound.author,
+    )
 
     license_url = payload.get("license") or ""
     sound.license_url = license_url
     sound.license_label = normalize_license_label(license_url)
-    sound.author = extract_author(payload)
 
     sound.updated_at = datetime.now(UTC)
 

@@ -106,12 +106,11 @@ export function SearchPage() {
           {loading ? <p>Loading sounds...</p> : null}
           {error ? (
             <div className="error-block">
-              <p className="error">{error.message}</p>
-              {error.kind === "network" ? (
-                <p className="error-hint">
-                  Backend appears offline. Verify <code>http://localhost:8000/api/health/</code>.
-                </p>
-              ) : null}
+              <p className="error">
+                {error.kind === "network"
+                  ? "We couldn't load sounds right now. Please try again in a moment."
+                  : error.message}
+              </p>
             </div>
           ) : null}
           {!loading && !error && sounds.length === 0 ? (

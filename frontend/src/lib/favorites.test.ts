@@ -9,6 +9,8 @@ const sample: FavoriteSound = {
   tags: ["synth"],
   licenseLabel: "CC0",
   previewUrl: "https://example.com/preview.mp3",
+  fileUrl: null,
+  canDownload: false,
   sourceUrl: "https://example.com"
 };
 
@@ -28,5 +30,16 @@ describe("favorites storage", () => {
 
     const removed = toggleFavorite(added, sample);
     expect(removed).toEqual([]);
+  });
+
+  it("repairs stale freesound download URLs for preview playback", () => {
+    saveFavorites([
+      {
+        ...sample,
+        previewUrl: "https://freesound.org/apiv2/sounds/123/download/"
+      }
+    ]);
+
+    expect(loadFavorites()[0].previewUrl).toBe("http://localhost:8000/api/sounds/1/preview");
   });
 });

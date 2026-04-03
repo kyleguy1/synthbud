@@ -53,7 +53,8 @@ def list_synths(
     source: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> List[str]:
-    if source and source.strip().lower() == "presetshare":
+    normalized_source = source.strip().lower() if source else None
+    if normalized_source == "presetshare":
         return list_supported_synth_names()
 
     stmt = (
@@ -78,7 +79,8 @@ def list_preset_packs(
     source: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> List[str]:
-    if source and source.strip().lower() == "presetshare":
+    normalized_source = source.strip().lower() if source else None
+    if normalized_source in {"presetshare", "presetshare-index"}:
         return []
 
     stmt = (
@@ -100,14 +102,16 @@ def list_preset_packs(
 
 @router.get("/preset-genres", response_model=List[str])
 def list_preset_genres(source: Optional[str] = Query(None)) -> List[str]:
-    if source and source.strip().lower() == "presetshare":
+    normalized_source = source.strip().lower() if source else None
+    if normalized_source in {"presetshare", "presetshare-index"}:
         return list_supported_genre_names()
     return []
 
 
 @router.get("/preset-types", response_model=List[str])
 def list_preset_types(source: Optional[str] = Query(None)) -> List[str]:
-    if source and source.strip().lower() == "presetshare":
+    normalized_source = source.strip().lower() if source else None
+    if normalized_source in {"presetshare", "presetshare-index"}:
         return list_supported_sound_type_names()
     return []
 

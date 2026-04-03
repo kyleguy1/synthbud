@@ -29,6 +29,7 @@ class ParsedPreset:
     preset_name: str
     synth_name: str
     synth_vendor: Optional[str] = None
+    author: Optional[str] = None
     parse_status: PresetParseStatusEnum = PresetParseStatusEnum.PARTIAL
     parse_error: Optional[str] = None
     raw_payload: Optional[dict] = None
@@ -174,7 +175,7 @@ def upsert_preset_from_parse(
             pack_id=pack.id,
             preset_key=preset_key,
             name=parsed.preset_name,
-            author=pack.author,
+            author=parsed.author or pack.author,
             tags=normalized_tags or None,
             synth_name=parsed.synth_name,
             synth_vendor=parsed.synth_vendor or pack.synth_vendor,
@@ -189,7 +190,7 @@ def upsert_preset_from_parse(
         db.flush()
     else:
         preset.name = parsed.preset_name
-        preset.author = preset.author or pack.author
+        preset.author = parsed.author or preset.author or pack.author
         preset.tags = normalized_tags or preset.tags
         preset.synth_name = parsed.synth_name
         preset.synth_vendor = parsed.synth_vendor or preset.synth_vendor

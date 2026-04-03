@@ -8,6 +8,7 @@ const mockListPresetPacks = vi.fn();
 const mockListPresetGenres = vi.fn();
 const mockListPresetTypes = vi.fn();
 const mockListPresets = vi.fn();
+const mockSyncPresetIndex = vi.fn();
 
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
@@ -17,7 +18,8 @@ vi.mock("../api/client", async () => {
     listPresetPacks: (...args: unknown[]) => mockListPresetPacks(...args),
     listPresetGenres: (...args: unknown[]) => mockListPresetGenres(...args),
     listPresetTypes: (...args: unknown[]) => mockListPresetTypes(...args),
-    listPresets: (...args: unknown[]) => mockListPresets(...args)
+    listPresets: (...args: unknown[]) => mockListPresets(...args),
+    syncPresetIndex: (...args: unknown[]) => mockSyncPresetIndex(...args)
   };
 });
 
@@ -57,7 +59,8 @@ function buildLocalResponse() {
     ],
     total: 1,
     page: 1,
-    page_size: 20
+    page_size: 20,
+    has_next: false
   };
 }
 
@@ -95,9 +98,51 @@ function buildPresetshareResponse() {
         }
       }
     ],
+    total: 2,
+    page: 1,
+    page_size: 20,
+    has_next: true
+  };
+}
+
+function buildPresetshareIndexResponse() {
+  return {
+    items: [
+      {
+        id: 201,
+        name: "Indexed Pad",
+        author: "cataloguser",
+        author_url: "https://presetshare.com/@cataloguser",
+        synth_name: "Serum",
+        synth_vendor: null,
+        tags: ["Synthwave", "Pad"],
+        visibility: "public" as const,
+        is_redistributable: true,
+        parse_status: "partial" as const,
+        source_url: "https://presetshare.com/p201",
+        source_key: "presetshare-index",
+        posted_label: "Yesterday",
+        like_count: 3,
+        download_count: 44,
+        comment_count: 1,
+        pack: {
+          id: 7,
+          name: "Serum Presets",
+          author: null,
+          synth_name: "Serum",
+          synth_vendor: null,
+          source_url: "https://presetshare.com",
+          license_label: null,
+          is_redistributable: true,
+          visibility: "public" as const,
+          source_key: "presetshare-index"
+        }
+      }
+    ],
     total: 1,
     page: 1,
-    page_size: 20
+    page_size: 20,
+    has_next: false
   };
 }
 
@@ -109,9 +154,24 @@ describe("PresetsPage", () => {
     mockListPresetPacks.mockResolvedValue(["Factory", "My Bank"]);
     mockListPresetGenres.mockResolvedValue(["Dubstep", "House"]);
     mockListPresetTypes.mockResolvedValue(["Lead", "Pad"]);
-    mockListPresets.mockImplementation(async (filters: { source: string }) =>
-      filters.source === "presetshare" ? buildPresetshareResponse() : buildLocalResponse()
-    );
+    mockListPresets.mockImplementation(async (filters: { source: string; page?: number }) => {
+      if (filters.source === "presetshare") {
+        return {
+          ...buildPresetshareResponse(),
+          page: filters.page ?? 1
+        };
+      }
+      if (filters.source === "presetshare-index") {
+        return buildPresetshareIndexResponse();
+      }
+      return buildLocalResponse();
+    });
+    mockSyncPresetIndex.mockResolvedValue({
+      source: "presetshare-index",
+      requested_pages: 10,
+      scanned_pages: 10,
+      ingested_count: 240
+    });
   });
 
   afterEach(() => {
@@ -133,6 +193,7 @@ describe("PresetsPage", () => {
 
     expect(screen.getByPlaceholderText("Search presets, bank, author...")).toBeInTheDocument();
     expect(screen.getByLabelText("Bank")).toBeInTheDocument();
+    expect(screen.getByLabelText("Page size")).toBeInTheDocument();
     expect(mockListPresets).toHaveBeenCalledWith(
       expect.objectContaining({ source: "local-filesystem", pack: "", genre: "", type: "" })
     );
@@ -172,6 +233,7 @@ describe("PresetsPage", () => {
     expect(screen.getByLabelText("Sound type")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search preset names or creators...")).toBeInTheDocument();
 
+    await user.selectOptions(screen.getByLabelText("Page size"), "50");
     await user.selectOptions(screen.getByLabelText("Genre"), "Dubstep");
     await user.selectOptions(screen.getByLabelText("Sound type"), "Lead");
 
@@ -181,7 +243,8 @@ describe("PresetsPage", () => {
           source: "presetshare",
           genre: "Dubstep",
           type: "Lead",
-          pack: ""
+          pack: "",
+          pageSize: 50
         })
       );
     });
@@ -199,5 +262,52 @@ describe("PresetsPage", () => {
       "href",
       "https://presetshare.com/u/presetuser"
     );
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "presetshare",
+          page: 2
+        })
+      );
+    });
+  });
+
+  it("can sync and browse the indexed online preset library", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "presetshare-index");
+
+    await waitFor(() => {
+      expect(screen.getByText("Build a larger searchable preset catalog inside the app")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText("Bank")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Genre")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sound type")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sync 10 pages" }));
+
+    await waitFor(() => {
+      expect(mockSyncPresetIndex).toHaveBeenCalledWith("presetshare-index", 10);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Indexed 240 presets from 10 PresetShare pages.")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Indexed Pad")).toBeInTheDocument();
+    });
   });
 });

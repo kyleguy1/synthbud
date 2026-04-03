@@ -76,3 +76,13 @@ def test_list_preset_genres_and_types_support_presetshare_source():
     response = client.get("/api/meta/preset-types?source=presetshare")
     assert response.status_code == 200
     assert "Lead" in response.json()
+
+
+def test_list_preset_genres_and_types_support_presetshare_index_source():
+    response = client.get("/api/meta/preset-genres?source=presetshare-index")
+    assert response.status_code == 200
+    assert "Dubstep" in response.json()
+
+    response = client.get("/api/meta/preset-types?source=presetshare-index")
+    assert response.status_code == 200
+    assert "Lead" in response.json()

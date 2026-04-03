@@ -7,18 +7,60 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models import Preset, PresetPack, PresetParameters, PresetSource, PresetVisibilityEnum
+from app.ingestion.presets.presetshare_index_ingestor import ingest_presetshare_index
 from app.scrapers.presetshare import (
     clear_cache as clear_presetshare_cache,
     build_cache_key as build_presetshare_cache_key,
     resolve_genre_id,
     resolve_sound_type_id,
     resolve_synth_id,
-    scrape_presets,
+    scrape_presets_window,
 )
 from app.schemas import PaginatedResponse, PresetDetail, PresetPackSummary, PresetSummary
 
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
+
+
+def _build_preset_summary(
+    *,
+    preset: Preset,
+    pack: PresetPack,
+    preset_source: PresetSource,
+    parameters: Optional[PresetParameters] = None,
+) -> PresetSummary:
+    raw_payload = parameters.raw_payload if parameters and parameters.raw_payload else {}
+
+    return PresetSummary(
+        id=preset.id,
+        name=preset.name,
+        author=preset.author,
+        author_url=raw_payload.get("authorUrl"),
+        synth_name=preset.synth_name,
+        synth_vendor=preset.synth_vendor,
+        tags=preset.tags or [],
+        visibility=preset.visibility.value,
+        is_redistributable=preset.is_redistributable,
+        parse_status=preset.parse_status.value,
+        source_url=preset.source_url,
+        source_key=preset_source.key,
+        posted_label=raw_payload.get("datePosted"),
+        like_count=raw_payload.get("likes"),
+        download_count=raw_payload.get("downloads"),
+        comment_count=raw_payload.get("comments"),
+        pack=PresetPackSummary(
+            id=pack.id,
+            name=pack.name,
+            author=pack.author,
+            synth_name=pack.synth_name,
+            synth_vendor=pack.synth_vendor,
+            source_url=pack.source_url,
+            license_label=pack.license_label,
+            is_redistributable=pack.is_redistributable,
+            visibility=pack.visibility.value,
+            source_key=preset_source.key,
+        ),
+    )
 
 
 @router.get("/", response_model=PaginatedResponse[PresetSummary])
@@ -43,7 +85,7 @@ def list_presets(
         genre_id = resolve_genre_id(genre)
         sound_type_id = resolve_sound_type_id(type)
 
-        scraped = scrape_presets(
+        scraped, has_next = scrape_presets_window(
             instrument=synth_id,
             genre=genre_id,
             sound_type=sound_type_id,
@@ -97,12 +139,20 @@ def list_presets(
                     ),
                 )
             )
-        return PaginatedResponse[PresetSummary](items=items, total=len(items), page=page, page_size=page_size)
+        total = ((page - 1) * page_size) + len(items) + (1 if has_next else 0)
+        return PaginatedResponse[PresetSummary](
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_next=has_next,
+        )
 
     stmt = (
-        select(Preset, PresetPack, PresetSource)
+        select(Preset, PresetPack, PresetSource, PresetParameters)
         .join(PresetPack, Preset.pack_id == PresetPack.id)
         .join(PresetSource, PresetPack.source_id == PresetSource.id)
+        .outerjoin(PresetParameters, Preset.id == PresetParameters.preset_id)
     )
     conditions = []
 
@@ -117,6 +167,10 @@ def list_presets(
         )
     if synth:
         conditions.append(Preset.synth_name.in_(synth))
+    if genre:
+        conditions.append(Preset.tags.any(genre))
+    if type:
+        conditions.append(Preset.tags.any(type))
     if pack:
         conditions.append(PresetPack.name.in_(pack))
     if author:
@@ -135,40 +189,22 @@ def list_presets(
     rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).all()
 
     items = [
-        PresetSummary(
-            id=preset.id,
-            name=preset.name,
-            author=preset.author,
-            author_url=None,
-            synth_name=preset.synth_name,
-            synth_vendor=preset.synth_vendor,
-            tags=preset.tags or [],
-            visibility=preset.visibility.value,
-            is_redistributable=preset.is_redistributable,
-            parse_status=preset.parse_status.value,
-            source_url=preset.source_url,
-            source_key=preset_source.key,
-            posted_label=None,
-            like_count=None,
-            download_count=None,
-            comment_count=None,
-            pack=PresetPackSummary(
-                id=pack.id,
-                name=pack.name,
-                author=pack.author,
-                synth_name=pack.synth_name,
-                synth_vendor=pack.synth_vendor,
-                source_url=pack.source_url,
-                license_label=pack.license_label,
-                is_redistributable=pack.is_redistributable,
-                visibility=pack.visibility.value,
-                source_key=preset_source.key,
-            ),
+        _build_preset_summary(
+            preset=preset,
+            pack=pack,
+            preset_source=preset_source,
+            parameters=parameters,
         )
-        for preset, pack, preset_source in rows
+        for preset, pack, preset_source, parameters in rows
     ]
 
-    return PaginatedResponse[PresetSummary](items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse[PresetSummary](
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(page * page_size) < total,
+    )
 
 
 @router.get("/{preset_id}", response_model=PresetDetail)
@@ -187,23 +223,14 @@ def get_preset_detail(
         raise HTTPException(status_code=404, detail="Preset not found")
 
     preset, pack, parameters, preset_source = row
+    summary = _build_preset_summary(
+        preset=preset,
+        pack=pack,
+        preset_source=preset_source,
+        parameters=parameters,
+    )
     return PresetDetail(
-        id=preset.id,
-        name=preset.name,
-        author=preset.author,
-        author_url=None,
-        synth_name=preset.synth_name,
-        synth_vendor=preset.synth_vendor,
-        tags=preset.tags or [],
-        visibility=preset.visibility.value,
-        is_redistributable=preset.is_redistributable,
-        parse_status=preset.parse_status.value,
-        source_url=preset.source_url,
-        source_key=preset_source.key,
-        posted_label=None,
-        like_count=None,
-        download_count=None,
-        comment_count=None,
+        **summary.model_dump(),
         parse_error=preset.parse_error,
         parser_version=preset.parser_version,
         imported_at=preset.imported_at,
@@ -214,19 +241,19 @@ def get_preset_detail(
         osc_count=(parameters.osc_count if parameters else None),
         fx_enabled=(parameters.fx_enabled if parameters else None),
         filter_enabled=(parameters.filter_enabled if parameters else None),
-        pack=PresetPackSummary(
-            id=pack.id,
-            name=pack.name,
-            author=pack.author,
-            synth_name=pack.synth_name,
-            synth_vendor=pack.synth_vendor,
-            source_url=pack.source_url,
-            license_label=pack.license_label,
-            is_redistributable=pack.is_redistributable,
-            visibility=pack.visibility.value,
-            source_key=preset_source.key,
-        ),
     )
+
+
+@router.post("/sync")
+def sync_presets(
+    source: str = Query("presetshare-index"),
+    max_pages: int = Query(10, ge=1, le=250),
+) -> dict:
+    normalized_source = source.strip().lower()
+    if normalized_source != "presetshare-index":
+        raise HTTPException(status_code=400, detail="Only presetshare-index sync is supported.")
+
+    return ingest_presetshare_index(max_pages=max_pages)
 
 
 @router.post("/cache-bust")

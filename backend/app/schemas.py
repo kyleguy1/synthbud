@@ -116,3 +116,4 @@ class PaginatedResponse(BaseModel, Generic[T]):
     total: int
     page: int
     page_size: int
+    has_next: Optional[bool] = None

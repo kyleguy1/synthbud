@@ -25,6 +25,7 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   page_size: number;
+  has_next?: boolean | null;
 }
 
 export interface PresetPackSummary {
@@ -79,7 +80,7 @@ export interface PresetFilters {
   genre: string;
   type: string;
   pack: string;
-  source: "local-filesystem" | "presetshare";
+  source: "local-filesystem" | "presetshare" | "presetshare-index";
   visibility: "" | "public" | "private";
   redistributableOnly: boolean;
   page: number;

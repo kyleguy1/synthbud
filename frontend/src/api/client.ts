@@ -27,11 +27,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const endpoint = `${API_BASE_URL}${path}`;
   let response: Response;
   try {
-    response = await fetch(endpoint);
+    response = await fetch(endpoint, init);
   } catch {
     throw new ApiError(
       "network",
@@ -139,6 +139,18 @@ export async function listPresetTypes(source?: string): Promise<string[]> {
   }
   const suffix = params.toString();
   return request<string[]>(`/api/meta/preset-types${suffix ? `?${suffix}` : ""}`);
+}
+
+export async function syncPresetIndex(source = "presetshare-index", maxPages = 10): Promise<{
+  source: string;
+  requested_pages: number;
+  scanned_pages: number;
+  ingested_count: number;
+}> {
+  const params = new URLSearchParams();
+  params.set("source", source);
+  params.set("max_pages", String(maxPages));
+  return request(`/api/presets/sync?${params.toString()}`, { method: "POST" });
 }
 
 export function getPlayableUrl(

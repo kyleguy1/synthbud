@@ -23,6 +23,7 @@ PRESETSHARE_USER_AGENT = (
 )
 DEFAULT_CACHE_TTL_SECONDS = 3600
 DEFAULT_MIN_REQUEST_INTERVAL_SECONDS = 1.0
+PRESETSHARE_UPSTREAM_PAGE_SIZE = 24
 
 SYNTH_NAME_TO_ID = {
     "serum": 1,
@@ -214,7 +215,7 @@ def _throttle(min_interval_seconds: float) -> None:
 
 
 def _parse_preset_card(card: Any) -> PresetsharePreset | None:
-    name_link = card.select_one('a[href^="/p"]')
+    name_link = card.select_one('a.preset-item__name, a[href^="/p"]')
     if name_link is None:
         return None
 
@@ -224,15 +225,34 @@ def _parse_preset_card(card: Any) -> PresetsharePreset | None:
     if not preset_id:
         return None
 
-    synth_link = card.select_one('a[href*="instrument="]')
-    genre_link = card.select_one('a[href*="genre="]')
-    sound_type_link = card.select_one('a[href*="type="]')
+    info_links = card.select(".preset-item__info a") or []
+    synth_link = (
+        info_links[0]
+        if len(info_links) >= 1
+        else card.select_one('a[href*="instrument="]')
+    )
+    genre_link = (
+        info_links[1]
+        if len(info_links) >= 2
+        else card.select_one('a[href*="genre="]')
+    )
+    sound_type_link = (
+        info_links[2]
+        if len(info_links) >= 3
+        else card.select_one('a[href*="type="]')
+    )
 
-    author_link = card.select_one('a[href*="/u/"], a[href*="/user/"], a[href*="/profile/"]')
-    date_node = card.select_one("time, .date, .posted, .meta")
+    author_link = card.select_one(
+        'a.preset-item-username, a[href*="/@"], a[href*="/u/"], a[href*="/user/"], a[href*="/profile/"]'
+    )
+    date_node = card.select_one(".preset-item-middle .text-muted, time, .date, .posted, .meta")
 
-    stat_nodes = card.select(".likes, .downloads, .comments, .stat, .stats span")
-    stats_text = [node.get_text(" ", strip=True) for node in stat_nodes if node.get_text(strip=True)]
+    footer_node = card.select_one(".preset-item-footer")
+    if footer_node is not None:
+        stats_text = [value for value in footer_node.stripped_strings if value]
+    else:
+        stat_nodes = card.select(".likes, .downloads, .comments, .stat, .stats span")
+        stats_text = [node.get_text(" ", strip=True) for node in stat_nodes if node.get_text(strip=True)]
     if len(stats_text) < 3:
         fallback_text = card.get_text(" ", strip=True)
         stats_text = stats_text + _INT_RE.findall(fallback_text)
@@ -267,7 +287,7 @@ def _parse_preset_card(card: Any) -> PresetsharePreset | None:
 
 def _parse_list_page(html: str) -> list[PresetsharePreset]:
     soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("article, .preset-card, .preset, li, .card")
+    cards = soup.select(".preset-item, article, .preset-card, .preset, li, .card")
     results: list[PresetsharePreset] = []
     seen_ids: set[str] = set()
     for card in cards:
@@ -294,8 +314,28 @@ def scrape_presets(
     cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS,
     min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
 ) -> list[PresetsharePreset]:
+    results, _has_next = scrape_presets_window(
+        instrument=instrument,
+        genre=genre,
+        sound_type=sound_type,
+        page=page,
+        limit=limit,
+        cache_ttl_seconds=cache_ttl_seconds,
+        min_request_interval_seconds=min_request_interval_seconds,
+    )
+    return results
+
+
+def scrape_presets_page(
+    *,
+    instrument: int | None = None,
+    genre: int | None = None,
+    sound_type: int | None = None,
+    page: int = 1,
+    cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS,
+    min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
+) -> list[PresetsharePreset]:
     current_page = max(1, page)
-    max_results = max(1, limit)
     cache_key = build_cache_key(
         instrument=instrument,
         genre=genre,
@@ -307,7 +347,7 @@ def scrape_presets(
     with _cache_lock:
         entry = _cache.get(cache_key)
         if entry and entry.expires_at > now:
-            return entry.data[:max_results]
+            return entry.data[:]
 
     params: dict[str, Any] = {"page": current_page}
     if instrument is not None:
@@ -321,7 +361,7 @@ def scrape_presets(
     with httpx.Client(timeout=20.0, follow_redirects=True, headers={"User-Agent": PRESETSHARE_USER_AGENT}) as client:
         response = client.get(urljoin(PRESETSHARE_BASE_URL, PRESETSHARE_PRESETS_PATH), params=params)
         response.raise_for_status()
-        results = _parse_list_page(response.text)[:max_results]
+        results = _parse_list_page(response.text)
 
     with _cache_lock:
         _cache[cache_key] = _CacheEntry(
@@ -329,3 +369,44 @@ def scrape_presets(
             data=results,
         )
     return results
+
+
+def scrape_presets_window(
+    *,
+    instrument: int | None = None,
+    genre: int | None = None,
+    sound_type: int | None = None,
+    page: int = 1,
+    limit: int = PRESETSHARE_UPSTREAM_PAGE_SIZE,
+    cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS,
+    min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
+) -> tuple[list[PresetsharePreset], bool]:
+    current_page = max(1, page)
+    max_results = max(1, limit)
+
+    start_index = (current_page - 1) * max_results
+    upstream_page = max(1, (start_index // PRESETSHARE_UPSTREAM_PAGE_SIZE) + 1)
+    local_skip = start_index - ((upstream_page - 1) * PRESETSHARE_UPSTREAM_PAGE_SIZE)
+    required_items = local_skip + max_results + 1
+
+    aggregated: list[PresetsharePreset] = []
+    while len(aggregated) < required_items:
+        upstream_items = scrape_presets_page(
+            instrument=instrument,
+            genre=genre,
+            sound_type=sound_type,
+            page=upstream_page,
+            cache_ttl_seconds=cache_ttl_seconds,
+            min_request_interval_seconds=min_request_interval_seconds,
+        )
+        if not upstream_items:
+            break
+
+        aggregated.extend(upstream_items)
+        if len(upstream_items) < PRESETSHARE_UPSTREAM_PAGE_SIZE:
+            break
+        upstream_page += 1
+
+    items = aggregated[local_skip : local_skip + max_results]
+    has_next = len(aggregated) > (local_skip + max_results)
+    return items, has_next

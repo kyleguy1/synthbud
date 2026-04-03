@@ -5,7 +5,8 @@ import {
   listPresetPacks,
   listPresets,
   listPresetTypes,
-  listSynths
+  listSynths,
+  syncPresetIndex
 } from "../api/client";
 import type { PresetFilters, PresetSummary } from "../types";
 
@@ -27,6 +28,8 @@ interface PresetsPageError {
   kind: "network" | "http" | "unknown";
 }
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+
 export function PresetsPage() {
   const [filters, setFilters] = useState<PresetFilters>(DEFAULT_FILTERS);
   const [presets, setPresets] = useState<PresetSummary[]>([]);
@@ -35,18 +38,25 @@ export function PresetsPage() {
   const [presetGenres, setPresetGenres] = useState<string[]>([]);
   const [presetTypes, setPresetTypes] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
+  const [hasNext, setHasNext] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<PresetsPageError | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const showRemoteDiscovery = filters.source === "presetshare";
-  const showBankFilter = !showRemoteDiscovery;
-  const showLocalFilters = !showRemoteDiscovery;
+  const showLiveRemoteDiscovery = filters.source === "presetshare";
+  const showIndexedRemoteLibrary = filters.source === "presetshare-index";
+  const showGenreAndTypeFilters = showLiveRemoteDiscovery || showIndexedRemoteLibrary;
+  const showBankFilter = filters.source === "local-filesystem";
+  const showLocalFilters = filters.source === "local-filesystem";
 
   useEffect(() => {
     void listSynths(filters.source)
       .then(setSynths)
       .catch(() => setSynths([]));
-  }, [filters.source]);
+  }, [filters.source, refreshKey]);
 
   useEffect(() => {
     if (!showBankFilter) {
@@ -68,10 +78,10 @@ export function PresetsPage() {
         });
       })
       .catch(() => setPresetPacks([]));
-  }, [filters.source, filters.synth, showBankFilter]);
+  }, [filters.source, filters.synth, showBankFilter, refreshKey]);
 
   useEffect(() => {
-    if (!showRemoteDiscovery) {
+    if (!showGenreAndTypeFilters) {
       setPresetGenres([]);
       setPresetTypes([]);
       return;
@@ -86,7 +96,7 @@ export function PresetsPage() {
         setPresetGenres([]);
         setPresetTypes([]);
       });
-  }, [filters.source, showRemoteDiscovery]);
+  }, [filters.source, showGenreAndTypeFilters]);
 
   useEffect(() => {
     setLoading(true);
@@ -95,6 +105,7 @@ export function PresetsPage() {
       .then((response) => {
         setPresets(response.items);
         setTotal(response.total);
+        setHasNext(response.has_next ?? null);
       })
       .catch((fetchError: unknown) => {
         if (fetchError instanceof ApiError) {
@@ -105,18 +116,45 @@ export function PresetsPage() {
           setError({ kind: "unknown", message: "Unable to load presets." });
         }
         setPresets([]);
+        setHasNext(null);
       })
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [filters, refreshKey]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
-  const emptyMessage = showRemoteDiscovery
+  const canGoNext = hasNext ?? filters.page < totalPages;
+  const emptyMessage = showLiveRemoteDiscovery
     ? "No online presets matched these filters."
-    : "No presets found for current filters.";
+    : showIndexedRemoteLibrary
+      ? "No indexed online presets yet. Run a sync to build the searchable catalog."
+      : "No presets found for current filters.";
+
+  async function handleSyncIndexedLibrary() {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncMessage(null);
+    try {
+      const result = await syncPresetIndex("presetshare-index", 10);
+      setSyncMessage(
+        `Indexed ${result.ingested_count} presets from ${result.scanned_pages} PresetShare page${result.scanned_pages === 1 ? "" : "s"}.`
+      );
+      setRefreshKey((prev) => prev + 1);
+    } catch (syncFetchError) {
+      if (syncFetchError instanceof ApiError) {
+        setSyncError(syncFetchError.message);
+      } else if (syncFetchError instanceof Error) {
+        setSyncError(syncFetchError.message);
+      } else {
+        setSyncError("Unable to sync online presets right now.");
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <main className="presets-page">
-      {showRemoteDiscovery ? (
+      {showLiveRemoteDiscovery ? (
         <section className="preset-discovery-banner">
           <div>
             <p className="preset-discovery-eyebrow">Online Discovery</p>
@@ -128,12 +166,31 @@ export function PresetsPage() {
           </div>
         </section>
       ) : null}
+      {showIndexedRemoteLibrary ? (
+        <section className="preset-discovery-banner">
+          <div>
+            <p className="preset-discovery-eyebrow">Indexed Online Library</p>
+            <h2>Build a larger searchable preset catalog inside the app</h2>
+            <p>
+              Sync batches of PresetShare metadata into the local database so search and paging
+              scale beyond one live scrape.
+            </p>
+          </div>
+          <div className="preset-index-actions">
+            <button type="button" onClick={() => void handleSyncIndexedLibrary()} disabled={syncing}>
+              {syncing ? "Syncing..." : "Sync 10 pages"}
+            </button>
+            {syncMessage ? <p>{syncMessage}</p> : null}
+            {syncError ? <p className="error">{syncError}</p> : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="presets-controls">
         <input
           type="search"
           aria-label="Search presets"
-          placeholder={showRemoteDiscovery ? "Search preset names or creators..." : "Search presets, bank, author..."}
+          placeholder={showLiveRemoteDiscovery ? "Search preset names or creators..." : "Search presets, bank, author..."}
           value={filters.q}
           onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
         />
@@ -155,6 +212,7 @@ export function PresetsPage() {
           }
         >
           <option value="local-filesystem">Local Library</option>
+          <option value="presetshare-index">Indexed Online</option>
           <option value="presetshare">Browse Online</option>
         </select>
         <select
@@ -203,7 +261,7 @@ export function PresetsPage() {
             ))}
           </select>
         )}
-        {showRemoteDiscovery ? (
+        {showGenreAndTypeFilters ? (
           <select
             aria-label="Sound type"
             value={filters.type}
@@ -245,6 +303,23 @@ export function PresetsPage() {
             Redistributable only
           </label>
         ) : null}
+        <select
+          aria-label="Page size"
+          value={String(filters.pageSize)}
+          onChange={(event) =>
+            setFilters((prev) => ({
+              ...prev,
+              pageSize: Number(event.target.value),
+              page: 1
+            }))
+          }
+        >
+          {PAGE_SIZE_OPTIONS.map((pageSizeOption) => (
+            <option key={pageSizeOption} value={pageSizeOption}>
+              {pageSizeOption} per page
+            </option>
+          ))}
+        </select>
       </section>
 
       {loading ? <p>Loading presets...</p> : null}
@@ -319,11 +394,11 @@ export function PresetsPage() {
           Prev
         </button>
         <span>
-          Page {filters.page} / {totalPages}
+          {showLiveRemoteDiscovery ? `Page ${filters.page}` : `Page ${filters.page} / ${totalPages}`}
         </span>
         <button
           type="button"
-          disabled={filters.page >= totalPages}
+          disabled={!canGoNext}
           onClick={() => setFilters((prev) => ({ ...prev, page: prev.page + 1 }))}
         >
           Next

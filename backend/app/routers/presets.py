@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import and_, func, or_, select
@@ -20,6 +20,98 @@ from app.schemas import PaginatedResponse, PresetDetail, PresetPackSummary, Pres
 
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
+VALID_PRESET_SORTS = {"default", "newest", "most-liked", "most-downloaded", "name-asc"}
+
+
+def _normalize_sort(sort: str | None) -> str:
+    normalized = (sort or "default").strip().lower()
+    return normalized if normalized in VALID_PRESET_SORTS else "default"
+
+
+def _coerce_metric(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _get_metric(parameters: Optional[PresetParameters], key: str) -> int:
+    payload = parameters.raw_payload if parameters and parameters.raw_payload else {}
+    return _coerce_metric(payload.get(key))
+
+
+def _sort_scraped_presets(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
+    normalized_sort = _normalize_sort(sort)
+    if normalized_sort in {"default", "newest"}:
+        return items
+    if normalized_sort == "most-liked":
+        return sorted(
+            items,
+            key=lambda item: (
+                _coerce_metric(item.get("likes")),
+                _coerce_metric(item.get("downloads")),
+                (item.get("name") or "").lower(),
+            ),
+            reverse=True,
+        )
+    if normalized_sort == "most-downloaded":
+        return sorted(
+            items,
+            key=lambda item: (
+                _coerce_metric(item.get("downloads")),
+                _coerce_metric(item.get("likes")),
+                (item.get("name") or "").lower(),
+            ),
+            reverse=True,
+        )
+    if normalized_sort == "name-asc":
+        return sorted(items, key=lambda item: (item.get("name") or "").lower())
+    return items
+
+
+def _sort_db_rows(
+    rows: list[tuple[Preset, PresetPack, PresetSource, Optional[PresetParameters]]],
+    sort: str,
+) -> list[tuple[Preset, PresetPack, PresetSource, Optional[PresetParameters]]]:
+    normalized_sort = _normalize_sort(sort)
+    if normalized_sort in {"default", "newest"}:
+        return sorted(
+            rows,
+            key=lambda row: (
+                row[0].imported_at,
+                row[0].id,
+            ),
+            reverse=True,
+        )
+    if normalized_sort == "name-asc":
+        return sorted(rows, key=lambda row: (row[0].name or "").lower())
+    if normalized_sort == "most-liked":
+        return sorted(
+            rows,
+            key=lambda row: (
+                _get_metric(row[3], "likes"),
+                _get_metric(row[3], "downloads"),
+                row[0].id,
+            ),
+            reverse=True,
+        )
+    if normalized_sort == "most-downloaded":
+        return sorted(
+            rows,
+            key=lambda row: (
+                _get_metric(row[3], "downloads"),
+                _get_metric(row[3], "likes"),
+                row[0].id,
+            ),
+            reverse=True,
+        )
+    return rows
 
 
 def _build_preset_summary(
@@ -74,10 +166,12 @@ def list_presets(
     author: Optional[List[str]] = Query(None, description="Author name(s)."),
     visibility: Optional[str] = Query(None, pattern="^(public|private)$"),
     redistributable: Optional[bool] = Query(None),
+    sort: str = Query("default"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedResponse[PresetSummary]:
+    normalized_sort = _normalize_sort(sort)
     if source and source.strip().lower() == "presetshare":
         settings = get_settings()
         synth_name = synth[0] if synth else None
@@ -102,6 +196,7 @@ def list_presets(
                 if q_lower in (item.get("name") or "").lower()
                 or q_lower in (item.get("author") or "").lower()
             ]
+        scraped = _sort_scraped_presets(scraped, normalized_sort)
 
         items: List[PresetSummary] = []
         for item in scraped:
@@ -185,8 +280,19 @@ def list_presets(
     if conditions:
         stmt = stmt.where(and_(*conditions))
 
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).all()
+    offset = (page - 1) * page_size
+    if normalized_sort in {"most-liked", "most-downloaded"}:
+        rows = _sort_db_rows(db.execute(stmt).all(), normalized_sort)
+        total = len(rows)
+        paged_rows = rows[offset : offset + page_size]
+    else:
+        ordered_stmt = stmt
+        if normalized_sort == "name-asc":
+            ordered_stmt = ordered_stmt.order_by(func.lower(Preset.name).asc(), Preset.id.asc())
+        else:
+            ordered_stmt = ordered_stmt.order_by(Preset.imported_at.desc(), Preset.id.desc())
+        total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+        paged_rows = db.execute(ordered_stmt.offset(offset).limit(page_size)).all()
 
     items = [
         _build_preset_summary(
@@ -195,7 +301,7 @@ def list_presets(
             preset_source=preset_source,
             parameters=parameters,
         )
-        for preset, pack, preset_source, parameters in rows
+        for preset, pack, preset_source, parameters in paged_rows
     ]
 
     return PaginatedResponse[PresetSummary](

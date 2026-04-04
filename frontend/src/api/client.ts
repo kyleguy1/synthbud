@@ -90,6 +90,9 @@ export async function listPresets(filters: PresetFilters): Promise<PaginatedResp
   if (filters.redistributableOnly) {
     params.set("redistributable", "true");
   }
+  if (filters.sort && filters.sort !== "default") {
+    params.set("sort", filters.sort);
+  }
   params.set("page", String(filters.page));
   params.set("page_size", String(filters.pageSize));
   return request<PaginatedResponse<PresetSummary>>(`/api/presets/?${params.toString()}`);

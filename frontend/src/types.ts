@@ -83,6 +83,7 @@ export interface PresetFilters {
   source: "local-filesystem" | "presetshare" | "presetshare-index";
   visibility: "" | "public" | "private";
   redistributableOnly: boolean;
+  sort: "default" | "newest" | "most-liked" | "most-downloaded" | "name-asc";
   page: number;
   pageSize: number;
 }

@@ -194,8 +194,9 @@ describe("PresetsPage", () => {
     expect(screen.getByPlaceholderText("Search presets, bank, author...")).toBeInTheDocument();
     expect(screen.getByLabelText("Bank")).toBeInTheDocument();
     expect(screen.getByLabelText("Page size")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sort")).toBeInTheDocument();
     expect(mockListPresets).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "local-filesystem", pack: "", genre: "", type: "" })
+      expect.objectContaining({ source: "local-filesystem", pack: "", genre: "", type: "", sort: "default" })
     );
 
     await user.selectOptions(screen.getByLabelText("Bank"), "My Bank");
@@ -231,8 +232,10 @@ describe("PresetsPage", () => {
     expect(screen.queryByLabelText("Bank")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Genre")).toBeInTheDocument();
     expect(screen.getByLabelText("Sound type")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sort")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search preset names or creators...")).toBeInTheDocument();
 
+    await user.selectOptions(screen.getByLabelText("Sort"), "most-liked");
     await user.selectOptions(screen.getByLabelText("Page size"), "50");
     await user.selectOptions(screen.getByLabelText("Genre"), "Dubstep");
     await user.selectOptions(screen.getByLabelText("Sound type"), "Lead");
@@ -244,6 +247,7 @@ describe("PresetsPage", () => {
           genre: "Dubstep",
           type: "Lead",
           pack: "",
+          sort: "most-liked",
           pageSize: 50
         })
       );
@@ -270,6 +274,45 @@ describe("PresetsPage", () => {
         expect.objectContaining({
           source: "presetshare",
           page: 2
+        })
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "Random preset" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Surprise Pick")).toBeInTheDocument();
+    });
+  });
+
+  it("refreshes suggestions and applies a new preset mix automatically", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "presetshare");
+    await waitFor(() => {
+      expect(screen.getByText("Discovery shortcuts")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh suggestions" }));
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "presetshare",
+          synth: "Vital",
+          genre: "Dubstep",
+          type: "Pad",
+          sort: "most-liked"
         })
       );
     });

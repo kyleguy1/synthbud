@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "synthbud",
+  "version": "0.1.0",
+  "identifier": "com.synthbud.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "synthbud",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1180,
+        "minHeight": 760,
+        "visible": false,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": [
+      "bin/synthbud-backend",
+      "../../backend/app",
+      "../../backend/alembic",
+      "../../backend/alembic.ini",
+      "../../backend/requirements.txt"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

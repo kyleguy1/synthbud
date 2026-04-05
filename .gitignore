@@ -19,6 +19,7 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/src-tauri/target/
 
 # IDE
 .idea/

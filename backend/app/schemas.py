@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, TypeVar, Generic
+from typing import Any, List, Optional, TypeVar, Generic
 
 from pydantic import BaseModel, ConfigDict
 
@@ -117,3 +117,22 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int
     page_size: int
     has_next: Optional[bool] = None
+
+
+class LibraryState(BaseModel):
+    desktop_mode: bool
+    sample_roots: List[str] = []
+    preset_roots: List[str] = []
+
+
+class LibraryImportRequest(BaseModel):
+    path: str
+
+
+class LibraryImportResponse(BaseModel):
+    kind: str
+    requested_path: str
+    effective_path: str
+    added: bool
+    roots: List[str]
+    import_result: dict[str, Any]

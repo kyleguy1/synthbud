@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { LocalLibraryImportPanel } from "../components/LocalLibraryImportPanel";
+import { ExternalLink } from "../components/ExternalLink";
 import {
   ApiError,
+  getLibraryState,
+  importPresetLibrary,
   listPresetGenres,
   listPresetPacks,
   listPresets,
@@ -161,6 +165,7 @@ export function PresetsPage() {
   const [filters, setFilters] = useState<PresetFilters>(DEFAULT_FILTERS);
   const [presets, setPresets] = useState<PresetSummary[]>([]);
   const [synths, setSynths] = useState<string[]>([]);
+  const [presetRoots, setPresetRoots] = useState<string[]>([]);
   const [presetPacks, setPresetPacks] = useState<string[]>([]);
   const [presetGenres, setPresetGenres] = useState<string[]>([]);
   const [presetTypes, setPresetTypes] = useState<string[]>([]);
@@ -180,6 +185,12 @@ export function PresetsPage() {
   const showGenreAndTypeFilters = showLiveRemoteDiscovery || showIndexedRemoteLibrary;
   const showBankFilter = filters.source === "local-filesystem";
   const showLocalFilters = filters.source === "local-filesystem";
+
+  useEffect(() => {
+    void getLibraryState()
+      .then((state) => setPresetRoots(state.preset_roots))
+      .catch(() => setPresetRoots([]));
+  }, [refreshKey]);
 
   useEffect(() => {
     void listSynths(filters.source)
@@ -640,6 +651,19 @@ export function PresetsPage() {
             ) : null}
           </section>
 
+          <LocalLibraryImportPanel
+            title="Import preset folder"
+            description="Choose a preset library folder and synthbud will add it to your tracked roots, then re-index the local preset banks."
+            roots={presetRoots}
+            importLabel="Import presets"
+            emptyMessage="No local preset folders imported yet."
+            onImport={importPresetLibrary}
+            onImported={(response) => {
+              setPresetRoots(response.roots);
+              setRefreshKey((prev) => prev + 1);
+            }}
+          />
+
           <section className="preset-suggestion-panel">
             <div className="preset-panel-heading">
               <div>
@@ -694,14 +718,14 @@ export function PresetsPage() {
                 {(surprisePreset.source_url || surprisePreset.author_url) ? (
                   <div className="preset-card-links">
                     {surprisePreset.source_url ? (
-                      <a href={surprisePreset.source_url} target="_blank" rel="noreferrer">
+                      <ExternalLink href={surprisePreset.source_url}>
                         Open preset page
-                      </a>
+                      </ExternalLink>
                     ) : null}
                     {surprisePreset.author_url ? (
-                      <a href={surprisePreset.author_url} target="_blank" rel="noreferrer">
+                      <ExternalLink href={surprisePreset.author_url}>
                         View creator
-                      </a>
+                      </ExternalLink>
                     ) : null}
                   </div>
                 ) : null}
@@ -778,14 +802,14 @@ export function PresetsPage() {
                 {(preset.source_url || preset.author_url) ? (
                   <div className="preset-card-links">
                     {preset.source_url ? (
-                      <a href={preset.source_url} target="_blank" rel="noreferrer">
+                      <ExternalLink href={preset.source_url}>
                         Open preset page
-                      </a>
+                      </ExternalLink>
                     ) : null}
                     {preset.author_url ? (
-                      <a href={preset.author_url} target="_blank" rel="noreferrer">
+                      <ExternalLink href={preset.author_url}>
                         View creator
-                      </a>
+                      </ExternalLink>
                     ) : null}
                   </div>
                 ) : null}

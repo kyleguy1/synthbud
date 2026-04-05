@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ApiError, listSounds, listTags } from "../api/client";
+import { ApiError, getLibraryState, importSampleLibrary, listSounds, listTags } from "../api/client";
 import { FiltersSidebar } from "../components/FiltersSidebar";
+import { LocalLibraryImportPanel } from "../components/LocalLibraryImportPanel";
 import { SoundCard } from "../components/SoundCard";
 import { TopBar } from "../components/TopBar";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -30,18 +31,26 @@ export function SearchPage() {
   const [sounds, setSounds] = useState<SoundSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [sampleRoots, setSampleRoots] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<SearchPageError | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const debouncedFilters = useDebouncedValue(filters, 300);
   const { toggleFromSummary, isFavoriteSound } = useFavorites();
   const { state: playerState, playSound, togglePlayPause } = usePlayer();
 
   useEffect(() => {
+    void getLibraryState()
+      .then((state) => setSampleRoots(state.sample_roots))
+      .catch(() => setSampleRoots([]));
+  }, [refreshKey]);
+
+  useEffect(() => {
     void listTags()
       .then(setAllTags)
       .catch(() => setAllTags([]));
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     setSearchParams(filtersToUrlParams(filters), { replace: true });
@@ -67,7 +76,7 @@ export function SearchPage() {
         setSounds([]);
       })
       .finally(() => setLoading(false));
-  }, [debouncedFilters]);
+  }, [debouncedFilters, refreshKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
 
@@ -81,26 +90,41 @@ export function SearchPage() {
       />
 
       <div className="search-content">
-        <FiltersSidebar
-          tags={allTags}
-          selectedTags={filters.tags}
-          minDuration={filters.minDuration}
-          maxDuration={filters.maxDuration}
-          minBrightness={filters.minBrightness}
-          maxBrightness={filters.maxBrightness}
-          bpmMin={filters.bpmMin}
-          bpmMax={filters.bpmMax}
-          onToggleTag={(tag) => {
-            setFilters((prev) => {
-              const hasTag = prev.tags.includes(tag);
-              const tags = hasTag ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag];
-              return { ...prev, tags, page: 1 };
-            });
-          }}
-          onRangeChange={(key, value) => {
-            setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
-          }}
-        />
+        <div className="search-sidebar-stack">
+          <LocalLibraryImportPanel
+            title="Import sample library"
+            description="Choose a folder of WAV, AIFF, FLAC, or OGG files and make it searchable in the main sound browser."
+            roots={sampleRoots}
+            importLabel="Import samples"
+            emptyMessage="No local sample folders imported yet."
+            onImport={importSampleLibrary}
+            onImported={(response) => {
+              setSampleRoots(response.roots);
+              setRefreshKey((prev) => prev + 1);
+            }}
+          />
+
+          <FiltersSidebar
+            tags={allTags}
+            selectedTags={filters.tags}
+            minDuration={filters.minDuration}
+            maxDuration={filters.maxDuration}
+            minBrightness={filters.minBrightness}
+            maxBrightness={filters.maxBrightness}
+            bpmMin={filters.bpmMin}
+            bpmMax={filters.bpmMax}
+            onToggleTag={(tag) => {
+              setFilters((prev) => {
+                const hasTag = prev.tags.includes(tag);
+                const tags = hasTag ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag];
+                return { ...prev, tags, page: 1 };
+              });
+            }}
+            onRangeChange={(key, value) => {
+              setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
+            }}
+          />
+        </div>
 
         <section className="sound-grid-section">
           {loading ? <p>Loading sounds...</p> : null}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { canShowDownloadLink, getDownloadUrl, getFreesoundSourceUrl } from "../api/client";
+import { ExternalLink } from "./ExternalLink";
 import { formatDuration } from "../lib/format";
 import type { SoundSummary } from "../types";
 
@@ -129,15 +130,13 @@ export function SoundCard({
           </a>
         ) : null}
 
-        {showSourceLink ? (
-          <a
+        {sourceLink ? (
+          <ExternalLink
             className="source-link"
-            href={sourceLink ?? undefined}
-            target="_blank"
-            rel="noreferrer"
+            href={sourceLink}
           >
             View on Freesound
-          </a>
+          </ExternalLink>
         ) : null}
       </div>
 

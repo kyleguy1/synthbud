@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { canShowDownloadLink, getFreesoundSourceUrl } from "../api/client";
+import { ExternalLink } from "../components/ExternalLink";
 import { downloadCredits } from "../lib/credits";
 import { formatDuration } from "../lib/format";
 import { useFavorites } from "../state/FavoritesContext";
@@ -71,7 +72,9 @@ export function FavoritesPage() {
             <button
               type="button"
               className="favorite-primary-button"
-              onClick={() => downloadCredits(favorites)}
+              onClick={() => {
+                void downloadCredits(favorites);
+              }}
               disabled={favorites.length === 0}
             >
               Export credits
@@ -215,9 +218,9 @@ export function FavoritesPage() {
                         </a>
                       ) : null}
                       {sourceLink ? (
-                        <a className="source-link" href={sourceLink} target="_blank" rel="noreferrer">
+                        <ExternalLink className="source-link" href={sourceLink}>
                           View on Freesound
-                        </a>
+                        </ExternalLink>
                       ) : null}
                       <button
                         type="button"

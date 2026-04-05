@@ -9,6 +9,8 @@ const mockListPresetGenres = vi.fn();
 const mockListPresetTypes = vi.fn();
 const mockListPresets = vi.fn();
 const mockSyncPresetIndex = vi.fn();
+const mockGetLibraryState = vi.fn();
+const mockImportPresetLibrary = vi.fn();
 
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
@@ -19,7 +21,9 @@ vi.mock("../api/client", async () => {
     listPresetGenres: (...args: unknown[]) => mockListPresetGenres(...args),
     listPresetTypes: (...args: unknown[]) => mockListPresetTypes(...args),
     listPresets: (...args: unknown[]) => mockListPresets(...args),
-    syncPresetIndex: (...args: unknown[]) => mockSyncPresetIndex(...args)
+    syncPresetIndex: (...args: unknown[]) => mockSyncPresetIndex(...args),
+    getLibraryState: (...args: unknown[]) => mockGetLibraryState(...args),
+    importPresetLibrary: (...args: unknown[]) => mockImportPresetLibrary(...args)
   };
 });
 
@@ -154,6 +158,11 @@ describe("PresetsPage", () => {
     mockListPresetPacks.mockResolvedValue(["Factory", "My Bank"]);
     mockListPresetGenres.mockResolvedValue(["Dubstep", "House"]);
     mockListPresetTypes.mockResolvedValue(["Lead", "Pad"]);
+    mockGetLibraryState.mockResolvedValue({
+      desktop_mode: false,
+      sample_roots: [],
+      preset_roots: []
+    });
     mockListPresets.mockImplementation(async (filters: { source: string; page?: number }) => {
       if (filters.source === "presetshare") {
         return {
@@ -351,6 +360,45 @@ describe("PresetsPage", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Indexed Pad")).toBeInTheDocument();
+    });
+  });
+
+  it("imports a local preset folder and refreshes local results", async () => {
+    const user = userEvent.setup();
+    mockImportPresetLibrary.mockResolvedValue({
+      kind: "presets",
+      requested_path: "/Users/kylechan/Presets",
+      effective_path: "/Users/kylechan/Presets",
+      added: true,
+      roots: ["/Users/kylechan/Presets"],
+      import_result: {
+        ingested_count: 5,
+        scanned_files: 6,
+        parse_failed_count: 1
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText("Import preset folder path"), "/Users/kylechan/Presets");
+    await user.click(screen.getByRole("button", { name: "Import presets" }));
+
+    await waitFor(() => {
+      expect(mockImportPresetLibrary).toHaveBeenCalledWith("/Users/kylechan/Presets");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("5 items indexed · 6 files scanned · 1 skipped.")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenCalledTimes(2);
     });
   });
 });

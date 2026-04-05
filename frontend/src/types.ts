@@ -115,6 +115,34 @@ export interface FavoriteSound {
   sourceUrl: string | null;
 }
 
+export interface RuntimeCapabilities {
+  externalLinks: boolean;
+  saveTextFile: boolean;
+  nativeDownloads: boolean;
+  pickDirectory: boolean;
+}
+
+export interface RuntimeConfig {
+  apiBaseUrl: string;
+  isDesktop: boolean;
+  capabilities: RuntimeCapabilities;
+}
+
+export interface LibraryState {
+  desktop_mode: boolean;
+  sample_roots: string[];
+  preset_roots: string[];
+}
+
+export interface LibraryImportResponse {
+  kind: "samples" | "presets";
+  requested_path: string;
+  effective_path: string;
+  added: boolean;
+  roots: string[];
+  import_result: Record<string, unknown>;
+}
+
 export interface PlayerState {
   sound: FavoriteSound | null;
   isPlaying: boolean;

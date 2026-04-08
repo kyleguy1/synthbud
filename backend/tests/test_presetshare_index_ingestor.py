@@ -157,3 +157,7 @@ def test_ingest_presetshare_index_is_idempotent(monkeypatch):
         "presetshare-index:vital",
     }
     assert {preset.author for preset in session.store[Preset]} == {"presetuser", "anotheruser"}
+    tags_by_name = {preset.name: preset.tags for preset in session.store[Preset]}
+    raw_tags_by_name = {preset.name: preset.raw_tags for preset in session.store[Preset]}
+    assert tags_by_name["Neuro Lead"] == ["lead", "dubstep"]
+    assert raw_tags_by_name["Air Pad"] == ["Synthwave", "Pad"]

@@ -4,6 +4,7 @@ from sqlalchemy import Float, String, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Sound, SoundFeatures
+from app.tag_taxonomy import canonicalize_tags
 
 
 def build_sound_search_query(
@@ -41,15 +42,16 @@ def build_sound_search_query(
                 func.array_to_string(
                     func.coalesce(Sound.tags, []), " ", type_=String
                 ).ilike(pattern),
+                func.array_to_string(
+                    func.coalesce(Sound.raw_tags, []), " ", type_=String
+                ).ilike(pattern),
             )
         )
 
     if tags:
-        tag_conditions = [
-            func.lower(tag) == func.any_(func.lower(Sound.tags))  # type: ignore[arg-type]
-            for tag in tags
-        ]
-        conditions.append(or_(*tag_conditions))
+        canonical_filter_tags = canonicalize_tags(tags)
+        if canonical_filter_tags:
+            conditions.append(or_(*(Sound.tags.any(tag) for tag in canonical_filter_tags)))
 
     if license_labels:
         conditions.append(Sound.license_label.in_(license_labels))

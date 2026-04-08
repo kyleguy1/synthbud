@@ -151,6 +151,7 @@ def test_list_presets_presetshare_source(monkeypatch):
     assert payload["items"][0]["like_count"] == 10
     assert payload["items"][0]["download_count"] == 200
     assert payload["items"][0]["comment_count"] == 3
+    assert payload["items"][0]["tags"] == ["lead", "dubstep"]
 
 
 def test_list_presets_presetshare_source_supports_metric_sorting(monkeypatch):

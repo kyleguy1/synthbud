@@ -28,6 +28,12 @@ export interface PaginatedResponse<T> {
   has_next?: boolean | null;
 }
 
+export interface TagFacet {
+  key: string;
+  label: string;
+  tags: string[];
+}
+
 export interface PresetPackSummary {
   id: number;
   name: string;

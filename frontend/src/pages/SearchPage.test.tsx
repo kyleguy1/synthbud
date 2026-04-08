@@ -5,7 +5,7 @@ import { SearchPage } from "./SearchPage";
 import { ApiError } from "../api/client";
 
 const mockListSounds = vi.fn();
-const mockListTags = vi.fn();
+const mockListTagFacets = vi.fn();
 const mockGetLibraryState = vi.fn();
 const mockImportSampleLibrary = vi.fn();
 
@@ -14,7 +14,7 @@ vi.mock("../api/client", async () => {
   return {
     ...actual,
     listSounds: (...args: unknown[]) => mockListSounds(...args),
-    listTags: (...args: unknown[]) => mockListTags(...args),
+    listTagFacets: (...args: unknown[]) => mockListTagFacets(...args),
     getLibraryState: (...args: unknown[]) => mockGetLibraryState(...args),
     importSampleLibrary: (...args: unknown[]) => mockImportSampleLibrary(...args)
   };
@@ -37,7 +37,7 @@ vi.mock("../state/PlayerContext", () => ({
 
 describe("SearchPage states", () => {
   beforeEach(() => {
-    mockListTags.mockResolvedValue([]);
+    mockListTagFacets.mockResolvedValue([]);
     mockGetLibraryState.mockResolvedValue({
       desktop_mode: false,
       sample_roots: [],
@@ -167,6 +167,26 @@ describe("SearchPage states", () => {
     await waitFor(() => {
       expect(mockListSounds).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("renders grouped canonical tag facets and hides obscure raw tags", async () => {
+    mockListSounds.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20
+    });
+    mockListTagFacets.mockResolvedValue([
+      { key: "role", label: "Role", tags: ["pad", "lead"] },
+      { key: "timbre", label: "Timbre", tags: ["warm", "lo-fi"] }
+    ]);
+
+    renderWithRouter();
+
+    expect(await screen.findByRole("heading", { name: "Role" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pad" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lo-Fi" })).toBeInTheDocument();
+    expect(screen.queryByText("232hz")).not.toBeInTheDocument();
   });
 });
 

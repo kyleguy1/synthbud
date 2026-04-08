@@ -7,7 +7,8 @@ import type {
   PresetSummary,
   SearchFilters,
   SoundDetail,
-  SoundSummary
+  SoundSummary,
+  TagFacet
 } from "../types";
 import { getApiBaseUrl } from "../lib/runtime";
 import { toSearchParams } from "../lib/query";
@@ -61,6 +62,19 @@ export async function listSounds(filters: SearchFilters): Promise<PaginatedRespo
 
 export async function listTags(): Promise<string[]> {
   return request<string[]>("/api/meta/tags");
+}
+
+export async function listTagFacets(): Promise<TagFacet[]> {
+  return request<TagFacet[]>("/api/meta/tag-facets");
+}
+
+export async function listPresetTagFacets(source?: string): Promise<TagFacet[]> {
+  const params = new URLSearchParams();
+  if (source) {
+    params.set("source", source);
+  }
+  const suffix = params.toString();
+  return request<TagFacet[]>(`/api/meta/preset-tag-facets${suffix ? `?${suffix}` : ""}`);
 }
 
 export async function getSoundDetail(soundId: number): Promise<SoundDetail> {

@@ -23,4 +23,5 @@ def test_build_sound_search_query_basic():
     )
     assert stmt is not None
     assert total == 1
-
+    statement_text = str(stmt)
+    assert "raw_tags" in statement_text

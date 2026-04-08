@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ApiError, getLibraryState, importSampleLibrary, listSounds, listTags } from "../api/client";
+import { ApiError, getLibraryState, importSampleLibrary, listSounds, listTagFacets } from "../api/client";
 import { FiltersSidebar } from "../components/FiltersSidebar";
 import { LocalLibraryImportPanel } from "../components/LocalLibraryImportPanel";
 import { SoundCard } from "../components/SoundCard";
@@ -10,7 +10,7 @@ import { soundSummaryToFavorite } from "../lib/favorites";
 import { filtersFromUrlParams, filtersToUrlParams } from "../lib/query";
 import { useFavorites } from "../state/FavoritesContext";
 import { usePlayer } from "../state/PlayerContext";
-import type { SearchFilters, SoundSummary } from "../types";
+import type { SearchFilters, SoundSummary, TagFacet } from "../types";
 
 const DEFAULT_FILTERS: SearchFilters = {
   q: "",
@@ -30,7 +30,7 @@ export function SearchPage() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
   const [sounds, setSounds] = useState<SoundSummary[]>([]);
   const [total, setTotal] = useState(0);
-  const [allTags, setAllTags] = useState<string[]>([]);
+  const [tagFacets, setTagFacets] = useState<TagFacet[]>([]);
   const [sampleRoots, setSampleRoots] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<SearchPageError | null>(null);
@@ -47,9 +47,9 @@ export function SearchPage() {
   }, [refreshKey]);
 
   useEffect(() => {
-    void listTags()
-      .then(setAllTags)
-      .catch(() => setAllTags([]));
+    void listTagFacets()
+      .then(setTagFacets)
+      .catch(() => setTagFacets([]));
   }, [refreshKey]);
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export function SearchPage() {
           />
 
           <FiltersSidebar
-            tags={allTags}
+            tagFacets={tagFacets}
             selectedTags={filters.tags}
             minDuration={filters.minDuration}
             maxDuration={filters.maxDuration}

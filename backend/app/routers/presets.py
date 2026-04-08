@@ -1,7 +1,7 @@
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -17,6 +17,7 @@ from app.scrapers.presetshare import (
     scrape_presets_window,
 )
 from app.schemas import PaginatedResponse, PresetDetail, PresetPackSummary, PresetSummary
+from app.tag_taxonomy import canonicalize_tags
 
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
@@ -195,6 +196,7 @@ def list_presets(
                 for item in scraped
                 if q_lower in (item.get("name") or "").lower()
                 or q_lower in (item.get("author") or "").lower()
+                or q_lower in " ".join(canonicalize_tags([item.get("genre"), item.get("soundType")]))
             ]
         scraped = _sort_scraped_presets(scraped, normalized_sort)
 
@@ -202,6 +204,9 @@ def list_presets(
         for item in scraped:
             fallback_id = int(item["id"]) if item["id"].isdigit() else 0
             pack_name = f'{item.get("synth") or "PresetShare"} Presets'
+            canonical_tags = canonicalize_tags(
+                [value for value in [item.get("genre"), item.get("soundType")] if value]
+            )
             items.append(
                 PresetSummary(
                     id=fallback_id,
@@ -210,7 +215,7 @@ def list_presets(
                     author_url=item.get("authorUrl"),
                     synth_name=item.get("synth") or "Unknown",
                     synth_vendor=None,
-                    tags=[value for value in [item.get("genre"), item.get("soundType")] if value],
+                    tags=canonical_tags,
                     visibility="public",
                     is_redistributable=True,
                     parse_status="success",
@@ -258,14 +263,24 @@ def list_presets(
                 func.lower(Preset.name).like(pattern),
                 func.lower(func.coalesce(Preset.author, "")).like(pattern),
                 func.lower(PresetPack.name).like(pattern),
+                func.array_to_string(
+                    func.coalesce(Preset.tags, []), " ", type_=String
+                ).ilike(pattern),
+                func.array_to_string(
+                    func.coalesce(Preset.raw_tags, []), " ", type_=String
+                ).ilike(pattern),
             )
         )
     if synth:
         conditions.append(Preset.synth_name.in_(synth))
     if genre:
-        conditions.append(Preset.tags.any(genre))
+        genre_tags = canonicalize_tags([genre])
+        if genre_tags:
+            conditions.append(or_(*(Preset.tags.any(tag) for tag in genre_tags)))
     if type:
-        conditions.append(Preset.tags.any(type))
+        type_tags = canonicalize_tags([type])
+        if type_tags:
+            conditions.append(or_(*(Preset.tags.any(tag) for tag in type_tags)))
     if pack:
         conditions.append(PresetPack.name.in_(pack))
     if author:

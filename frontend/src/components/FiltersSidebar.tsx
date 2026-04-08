@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+
+import type { TagFacet } from "../types";
 
 interface FiltersSidebarProps {
-  tags: string[];
+  tagFacets: TagFacet[];
   selectedTags: string[];
   minDuration?: number;
   maxDuration?: number;
@@ -21,24 +23,29 @@ type RangeKey =
   | "bpmMin"
   | "bpmMax";
 
-const DEFAULT_VISIBLE_TAG_COUNT = 18;
+const SPECIAL_TAG_LABELS: Record<string, string> = {
+  "drum-and-bass": "Drum & Bass",
+  "hip-hop": "Hip-Hop",
+  "lo-fi": "Lo-Fi",
+  "one-shot": "One-Shot"
+};
 
 export function FiltersSidebar(props: FiltersSidebarProps) {
-  const [showAllTags, setShowAllTags] = useState(false);
-  const orderedTags = useMemo(() => {
-    const uniqueTags = Array.from(new Set(props.tags));
-    const selected = uniqueTags
-      .filter((tag) => props.selectedTags.includes(tag))
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-    const unselected = uniqueTags
-      .filter((tag) => !props.selectedTags.includes(tag))
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-
-    return [...selected, ...unselected];
-  }, [props.selectedTags, props.tags]);
-
-  const visibleTags = showAllTags ? orderedTags : orderedTags.slice(0, DEFAULT_VISIBLE_TAG_COUNT);
-  const hiddenTagsCount = Math.max(0, orderedTags.length - visibleTags.length);
+  const orderedFacets = useMemo(
+    () =>
+      props.tagFacets
+        .map((facet) => {
+          const uniqueTags = Array.from(new Set(facet.tags));
+          const selected = uniqueTags.filter((tag) => props.selectedTags.includes(tag));
+          const unselected = uniqueTags.filter((tag) => !props.selectedTags.includes(tag));
+          return {
+            ...facet,
+            tags: [...selected, ...unselected]
+          };
+        })
+        .filter((facet) => facet.tags.length > 0),
+    [props.selectedTags, props.tagFacets]
+  );
 
   return (
     <aside className="filters-sidebar">
@@ -108,33 +115,42 @@ export function FiltersSidebar(props: FiltersSidebarProps) {
           <h3>Tags</h3>
           <span>{props.selectedTags.length} selected</span>
         </div>
-        <div className="chips tag-grid">
-          {visibleTags.map((tag) => {
-            const selected = props.selectedTags.includes(tag);
-            return (
-              <button
-                key={tag}
-                type="button"
-                className={selected ? "chip selected" : "chip"}
-                onClick={() => props.onToggleTag(tag)}
-              >
-                {tag}
-              </button>
-            );
-          })}
+        <div className="tag-facet-stack">
+          {orderedFacets.map((facet) => (
+            <section key={facet.key} className="tag-facet-group" aria-label={facet.label}>
+              <h4>{facet.label}</h4>
+              <div className="chips tag-grid">
+                {facet.tags.map((tag) => {
+                  const selected = props.selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={selected ? "chip selected" : "chip"}
+                      onClick={() => props.onToggleTag(tag)}
+                    >
+                      {formatTagLabel(tag)}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
-        {hiddenTagsCount > 0 ? (
-          <button
-            type="button"
-            className="tag-list-toggle"
-            onClick={() => setShowAllTags((prev) => !prev)}
-          >
-            {showAllTags ? "Show fewer tags" : `Show ${hiddenTagsCount} more tags`}
-          </button>
-        ) : null}
       </div>
     </aside>
   );
+}
+
+function formatTagLabel(tag: string): string {
+  const special = SPECIAL_TAG_LABELS[tag];
+  if (special) {
+    return special;
+  }
+  return tag
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 interface RangeInputProps {
@@ -165,7 +181,8 @@ function RangeInput({ label, value, min, max, step, unit, onChange }: RangeInput
         }}
       />
       <small>
-        Range: {min} to {max}{unit ? ` ${unit}` : ""}
+        Range: {min} to {max}
+        {unit ? ` ${unit}` : ""}
       </small>
     </label>
   );

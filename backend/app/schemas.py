@@ -111,6 +111,12 @@ class PresetDetail(PresetSummary):
 T = TypeVar("T")
 
 
+class TagFacet(BaseModel):
+    key: str
+    label: str
+    tags: List[str] = []
+
+
 class PaginatedResponse(BaseModel, Generic[T]):
     items: List[T]
     total: int

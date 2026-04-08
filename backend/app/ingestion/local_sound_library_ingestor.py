@@ -10,6 +10,7 @@ import re
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import IngestionRun, IngestionStatusEnum, Sound, SoundFeatures
+from app.tag_taxonomy import reconcile_tag_fields
 
 
 SEPARATOR_RE = re.compile(r"[_\-]+")
@@ -21,7 +22,7 @@ class LocalSoundDiscovery:
     root: Path
     file_path: Path
     relative_path: Path
-    tags: tuple[str, ...]
+    raw_tags: tuple[str, ...]
 
 
 def _iter_local_files(roots: Iterable[Path]) -> Iterable[tuple[Path, Path]]:
@@ -68,7 +69,7 @@ def classify_local_sound_file(
         root=root,
         file_path=file_path,
         relative_path=relative_path,
-        tags=_build_tags(relative_path),
+        raw_tags=_build_tags(relative_path),
     )
 
 
@@ -165,7 +166,9 @@ def ingest_local_sounds(limit: int | None = None) -> dict:
 
                         sound.name = discovery.relative_path.stem
                         sound.description = f"Imported from {discovery.relative_path.as_posix()}"
-                        sound.tags = list(discovery.tags)
+                        raw_tags, canonical_tags = reconcile_tag_fields(raw_tags=discovery.raw_tags)
+                        sound.raw_tags = raw_tags
+                        sound.tags = canonical_tags
                         sound.duration_sec = float(info.duration) if info.duration else None
                         sound.sample_rate = int(info.samplerate) if info.samplerate else None
                         sound.channels = int(info.channels) if info.channels else None

@@ -203,9 +203,10 @@ def test_ingest_local_presets_keeps_duplicate_hashes_in_multiple_banks(monkeypat
 def test_ingest_local_presets_reports_skips(monkeypatch, tmp_path: Path):
     _write_serum_fixture(tmp_path / "serum" / "My Bank" / "Lead 01.fxp")
     _write_serum_fixture(tmp_path / "serum" / "My Bank" / "Factory.fxb")
-    unsupported = tmp_path / "vital" / "Factory" / "Patch.vital"
+    # Use a synth that has no registered handler (Phase Plant)
+    unsupported = tmp_path / "phase-plant" / "Factory" / "Patch.phaseplant"
     unsupported.parent.mkdir(parents=True, exist_ok=True)
-    unsupported.write_text("noop", encoding="utf-8")
+    unsupported.write_bytes(b"noop")
 
     session = FakeSession()
     _monkeypatch_ingestor(monkeypatch, session, tmp_path)

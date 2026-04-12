@@ -103,7 +103,7 @@ class Settings(BaseSettings):
         description="Filesystem roots to scan for curated public preset metadata JSON.",
     )
     preset_file_extensions_allowlist: List[str] = Field(
-        default_factory=lambda: [".fxp", ".serumpreset"],
+        default_factory=lambda: [".fxp", ".serumpreset", ".vital"],
         description="Preset file extensions eligible for indexing/parsing.",
     )
     preset_public_source_allowlist: List[str] = Field(
@@ -122,6 +122,16 @@ class Settings(BaseSettings):
     presetshare_min_request_interval_seconds: float = Field(
         1.0,
         description="Minimum interval between outgoing PresetShare requests.",
+    )
+
+    # Patchstorage
+    patchstorage_cache_ttl_seconds: int = Field(
+        3600,
+        description="Cache TTL in seconds for Patchstorage API responses.",
+    )
+    patchstorage_min_request_interval_seconds: float = Field(
+        0.5,
+        description="Minimum interval between outgoing Patchstorage API requests.",
     )
 
     class Config:

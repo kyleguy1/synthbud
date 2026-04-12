@@ -35,6 +35,7 @@ class Sound(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tags: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), nullable=True)
+    raw_tags: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), nullable=True)
 
     duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sample_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -204,6 +205,7 @@ class Preset(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     author: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     tags: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), nullable=True)
+    raw_tags: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), nullable=True)
     synth_name: Mapped[str] = mapped_column(String(64), nullable=False)
     synth_vendor: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     visibility: Mapped[PresetVisibilityEnum] = mapped_column(

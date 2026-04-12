@@ -82,6 +82,39 @@ npm run dev
 
 - App: `http://localhost:5173`
 
+## Desktop setup
+
+The repo now includes a Tauri desktop shell that wraps the existing React UI and starts the Python backend as a hidden sidecar.
+
+Current desktop target:
+- macOS first
+- Tauri shell around the existing Vite app
+- desktop backend launcher: `backend/app/desktop_launcher.py`
+
+Desktop prerequisites:
+- Rust toolchain with `cargo`
+- Node.js
+- the existing backend virtualenv at `backend/.venv`
+- a reachable Postgres database
+
+Desktop dev command:
+
+```bash
+cd frontend
+npm run desktop:dev
+```
+
+What this does:
+- starts the Vite dev server
+- launches the Tauri desktop shell
+- starts the backend through the desktop launcher
+- points the desktop UI at the runtime API base instead of hardcoding `localhost:8000`
+
+Important current notes:
+- this environment does not bundle Rust or Postgres binaries in-repo; `desktop:dev` assumes your local toolchain is installed
+- if desktop-managed Postgres binaries are not available, the desktop launcher falls back to the configured `SYNTHBUD_DATABASE_URL` or the default local Postgres URL
+- desktop runtime data is written under the user app data directory instead of repo-relative paths
+
 ## One-step startup
 
 ```bash

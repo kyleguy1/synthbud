@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import IngestionRun, IngestionStatusEnum, Sound
+from app.tag_taxonomy import reconcile_tag_fields
 from .freesound_client import FreesoundClient
 
 
@@ -117,9 +118,12 @@ def upsert_sound_from_payload(db: Session, payload: dict) -> Sound:
         sound = Sound(source=source, source_sound_id=source_sound_id, name=payload.get("name") or "")
         db.add(sound)
 
+    raw_tags, canonical_tags = reconcile_tag_fields(raw_tags=payload.get("tags") or [])
+
     sound.name = payload.get("name") or sound.name
     sound.description = payload.get("description") or payload.get("tags", "")
-    sound.tags = payload.get("tags") or []
+    sound.raw_tags = raw_tags
+    sound.tags = canonical_tags
     sound.duration_sec = payload.get("duration")
     sound.sample_rate = payload.get("samplerate")
     sound.channels = payload.get("channels")

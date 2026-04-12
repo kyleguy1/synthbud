@@ -5,14 +5,18 @@ import { SearchPage } from "./SearchPage";
 import { ApiError } from "../api/client";
 
 const mockListSounds = vi.fn();
-const mockListTags = vi.fn();
+const mockListTagFacets = vi.fn();
+const mockGetLibraryState = vi.fn();
+const mockImportSampleLibrary = vi.fn();
 
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
   return {
     ...actual,
     listSounds: (...args: unknown[]) => mockListSounds(...args),
-    listTags: (...args: unknown[]) => mockListTags(...args)
+    listTagFacets: (...args: unknown[]) => mockListTagFacets(...args),
+    getLibraryState: (...args: unknown[]) => mockGetLibraryState(...args),
+    importSampleLibrary: (...args: unknown[]) => mockImportSampleLibrary(...args)
   };
 });
 
@@ -33,7 +37,12 @@ vi.mock("../state/PlayerContext", () => ({
 
 describe("SearchPage states", () => {
   beforeEach(() => {
-    mockListTags.mockResolvedValue([]);
+    mockListTagFacets.mockResolvedValue([]);
+    mockGetLibraryState.mockResolvedValue({
+      desktop_mode: false,
+      sample_roots: [],
+      preset_roots: []
+    });
   });
 
   afterEach(() => {
@@ -117,6 +126,67 @@ describe("SearchPage states", () => {
         })
       );
     });
+  });
+
+  it("imports a local sample folder and refreshes search data", async () => {
+    const user = userEvent.setup();
+    mockListSounds.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20
+    });
+    mockImportSampleLibrary.mockResolvedValue({
+      kind: "samples",
+      requested_path: "/Users/kylechan/Samples",
+      effective_path: "/Users/kylechan/Samples",
+      added: true,
+      roots: ["/Users/kylechan/Samples"],
+      import_result: {
+        ingested_count: 8,
+        scanned_files: 10,
+        failed_count: 1
+      }
+    });
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(mockListSounds).toHaveBeenCalledTimes(1);
+    });
+
+    await user.type(screen.getByLabelText("Import sample library path"), "/Users/kylechan/Samples");
+    await user.click(screen.getByRole("button", { name: "Import samples" }));
+
+    await waitFor(() => {
+      expect(mockImportSampleLibrary).toHaveBeenCalledWith("/Users/kylechan/Samples");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("8 items indexed · 10 files scanned · 1 skipped.")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockListSounds).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("renders grouped canonical tag facets and hides obscure raw tags", async () => {
+    mockListSounds.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20
+    });
+    mockListTagFacets.mockResolvedValue([
+      { key: "role", label: "Role", tags: ["pad", "lead"] },
+      { key: "timbre", label: "Timbre", tags: ["warm", "lo-fi"] }
+    ]);
+
+    renderWithRouter();
+
+    expect(await screen.findByRole("heading", { name: "Role" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pad" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lo-Fi" })).toBeInTheDocument();
+    expect(screen.queryByText("232hz")).not.toBeInTheDocument();
   });
 });
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import health, sounds, meta, presets
+from .routers import health, libraries, sounds, meta, presets
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health.router)
+    app.include_router(libraries.router)
     app.include_router(sounds.router)
     app.include_router(meta.router)
     app.include_router(presets.router)

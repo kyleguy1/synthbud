@@ -94,7 +94,7 @@ def ingest_public_catalog(limit_files: int | None = None) -> dict[str, Any]:
                             pack=pack,
                             preset_key=str(preset_payload.get("preset_key") or preset_payload.get("name") or "preset"),
                             parsed=parsed,
-                            tags=preset_payload.get("tags") or [],
+                            raw_tags=preset_payload.get("tags") or [],
                             source_url=preset_payload.get("source_url") or pack.source_url,
                         )
                         ingested_presets += 1

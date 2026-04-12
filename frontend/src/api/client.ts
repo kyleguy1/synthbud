@@ -1,15 +1,19 @@
 import type {
+  LibraryImportResponse,
+  LibraryState,
   PaginatedResponse,
   PresetDetail,
   PresetFilters,
   PresetSummary,
   SearchFilters,
   SoundDetail,
-  SoundSummary
+  SoundSummary,
+  TagFacet
 } from "../types";
+import { getApiBaseUrl } from "../lib/runtime";
 import { toSearchParams } from "../lib/query";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export type ApiErrorKind = "network" | "http";
 
@@ -28,7 +32,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const endpoint = `${API_BASE_URL}${path}`;
+  const endpoint = `${getApiBaseUrl()}${path}`;
   let response: Response;
   try {
     response = await fetch(endpoint, init);
@@ -60,6 +64,19 @@ export async function listTags(): Promise<string[]> {
   return request<string[]>("/api/meta/tags");
 }
 
+export async function listTagFacets(): Promise<TagFacet[]> {
+  return request<TagFacet[]>("/api/meta/tag-facets");
+}
+
+export async function listPresetTagFacets(source?: string): Promise<TagFacet[]> {
+  const params = new URLSearchParams();
+  if (source) {
+    params.set("source", source);
+  }
+  const suffix = params.toString();
+  return request<TagFacet[]>(`/api/meta/preset-tag-facets${suffix ? `?${suffix}` : ""}`);
+}
+
 export async function getSoundDetail(soundId: number): Promise<SoundDetail> {
   return request<SoundDetail>(`/api/sounds/${soundId}`);
 }
@@ -89,6 +106,9 @@ export async function listPresets(filters: PresetFilters): Promise<PaginatedResp
   }
   if (filters.redistributableOnly) {
     params.set("redistributable", "true");
+  }
+  if (filters.sort && filters.sort !== "default") {
+    params.set("sort", filters.sort);
   }
   params.set("page", String(filters.page));
   params.set("page_size", String(filters.pageSize));
@@ -153,15 +173,39 @@ export async function syncPresetIndex(source = "presetshare-index", maxPages = 1
   return request(`/api/presets/sync?${params.toString()}`, { method: "POST" });
 }
 
+export async function getLibraryState(): Promise<LibraryState> {
+  return request<LibraryState>("/api/libraries/");
+}
+
+export async function importSampleLibrary(path: string): Promise<LibraryImportResponse> {
+  return request<LibraryImportResponse>("/api/libraries/samples/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ path })
+  });
+}
+
+export async function importPresetLibrary(path: string): Promise<LibraryImportResponse> {
+  return request<LibraryImportResponse>("/api/libraries/presets/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ path })
+  });
+}
+
 export function getPlayableUrl(
   soundId: number,
   previewUrl: string | null
 ): string {
-  return previewUrl || `${API_BASE_URL}/api/sounds/${soundId}/preview`;
+  return previewUrl || `${getApiBaseUrl()}/api/sounds/${soundId}/preview`;
 }
 
 export function getDownloadUrl(soundId: number): string {
-  return `${API_BASE_URL}/api/sounds/${soundId}/download`;
+  return `${getApiBaseUrl()}/api/sounds/${soundId}/download`;
 }
 
 export function isUnavailableDownloadUrl(fileUrl: string | null | undefined): boolean {

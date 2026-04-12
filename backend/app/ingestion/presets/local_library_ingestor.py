@@ -34,7 +34,7 @@ class LocalPresetDiscovery:
     bank_name: str
     bank_external_id: str
     nested_tag_parts: tuple[str, ...]
-    tags: tuple[str, ...]
+    raw_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -112,7 +112,7 @@ def classify_local_preset_file(
             bank_name=bank_name,
             bank_external_id=_build_bank_external_id(synth_handler.synth_key, bank_name),
             nested_tag_parts=nested_parts,
-            tags=_build_search_tags(synth_handler, bank_name, nested_parts),
+            raw_tags=_build_search_tags(synth_handler, bank_name, nested_parts),
         )
     )
 
@@ -182,7 +182,7 @@ def ingest_local_presets(limit: int | None = None) -> dict:
                     pack=pack,
                     preset_key=file_hash[:24],
                     parsed=parsed,
-                    tags=discovery.tags,
+                    raw_tags=discovery.raw_tags,
                     source_url=None,
                 )
                 upsert_preset_file(

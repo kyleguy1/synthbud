@@ -18,6 +18,7 @@ from app.models import (
     PresetSource,
     PresetVisibilityEnum,
 )
+from app.tag_taxonomy import reconcile_tag_fields
 
 
 SERUM_FILE_HINT_RE = re.compile(r"(serum|\.fxp$|\.serumpreset$)", re.IGNORECASE)
@@ -159,7 +160,7 @@ def upsert_preset_from_parse(
     pack: PresetPack,
     preset_key: str,
     parsed: ParsedPreset,
-    tags: Iterable[str] | None = None,
+    raw_tags: Iterable[str] | None = None,
     source_url: str | None = None,
     parser_version: str = "serum-mvp-0.1",
 ) -> Preset:
@@ -168,7 +169,7 @@ def upsert_preset_from_parse(
         .filter(Preset.pack_id == pack.id, Preset.preset_key == preset_key)
         .first()
     )
-    normalized_tags = [t.strip() for t in (tags or []) if t and t.strip()]
+    resolved_raw_tags, canonical_tags = reconcile_tag_fields(raw_tags=raw_tags)
 
     if preset is None:
         preset = Preset(
@@ -176,7 +177,8 @@ def upsert_preset_from_parse(
             preset_key=preset_key,
             name=parsed.preset_name,
             author=parsed.author or pack.author,
-            tags=normalized_tags or None,
+            tags=canonical_tags,
+            raw_tags=resolved_raw_tags,
             synth_name=parsed.synth_name,
             synth_vendor=parsed.synth_vendor or pack.synth_vendor,
             visibility=pack.visibility,
@@ -191,7 +193,8 @@ def upsert_preset_from_parse(
     else:
         preset.name = parsed.preset_name
         preset.author = parsed.author or preset.author or pack.author
-        preset.tags = normalized_tags or preset.tags
+        preset.tags = canonical_tags
+        preset.raw_tags = resolved_raw_tags
         preset.synth_name = parsed.synth_name
         preset.synth_vendor = parsed.synth_vendor or preset.synth_vendor
         preset.visibility = pack.visibility

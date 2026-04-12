@@ -9,6 +9,8 @@ const mockListPresetGenres = vi.fn();
 const mockListPresetTypes = vi.fn();
 const mockListPresets = vi.fn();
 const mockSyncPresetIndex = vi.fn();
+const mockGetLibraryState = vi.fn();
+const mockImportPresetLibrary = vi.fn();
 
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
@@ -19,7 +21,9 @@ vi.mock("../api/client", async () => {
     listPresetGenres: (...args: unknown[]) => mockListPresetGenres(...args),
     listPresetTypes: (...args: unknown[]) => mockListPresetTypes(...args),
     listPresets: (...args: unknown[]) => mockListPresets(...args),
-    syncPresetIndex: (...args: unknown[]) => mockSyncPresetIndex(...args)
+    syncPresetIndex: (...args: unknown[]) => mockSyncPresetIndex(...args),
+    getLibraryState: (...args: unknown[]) => mockGetLibraryState(...args),
+    importPresetLibrary: (...args: unknown[]) => mockImportPresetLibrary(...args)
   };
 });
 
@@ -154,6 +158,11 @@ describe("PresetsPage", () => {
     mockListPresetPacks.mockResolvedValue(["Factory", "My Bank"]);
     mockListPresetGenres.mockResolvedValue(["Dubstep", "House"]);
     mockListPresetTypes.mockResolvedValue(["Lead", "Pad"]);
+    mockGetLibraryState.mockResolvedValue({
+      desktop_mode: false,
+      sample_roots: [],
+      preset_roots: []
+    });
     mockListPresets.mockImplementation(async (filters: { source: string; page?: number }) => {
       if (filters.source === "presetshare") {
         return {
@@ -194,8 +203,9 @@ describe("PresetsPage", () => {
     expect(screen.getByPlaceholderText("Search presets, bank, author...")).toBeInTheDocument();
     expect(screen.getByLabelText("Bank")).toBeInTheDocument();
     expect(screen.getByLabelText("Page size")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sort")).toBeInTheDocument();
     expect(mockListPresets).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "local-filesystem", pack: "", genre: "", type: "" })
+      expect.objectContaining({ source: "local-filesystem", pack: "", genre: "", type: "", sort: "default" })
     );
 
     await user.selectOptions(screen.getByLabelText("Bank"), "My Bank");
@@ -231,8 +241,10 @@ describe("PresetsPage", () => {
     expect(screen.queryByLabelText("Bank")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Genre")).toBeInTheDocument();
     expect(screen.getByLabelText("Sound type")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sort")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search preset names or creators...")).toBeInTheDocument();
 
+    await user.selectOptions(screen.getByLabelText("Sort"), "most-liked");
     await user.selectOptions(screen.getByLabelText("Page size"), "50");
     await user.selectOptions(screen.getByLabelText("Genre"), "Dubstep");
     await user.selectOptions(screen.getByLabelText("Sound type"), "Lead");
@@ -244,6 +256,7 @@ describe("PresetsPage", () => {
           genre: "Dubstep",
           type: "Lead",
           pack: "",
+          sort: "most-liked",
           pageSize: 50
         })
       );
@@ -270,6 +283,45 @@ describe("PresetsPage", () => {
         expect.objectContaining({
           source: "presetshare",
           page: 2
+        })
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "Random preset" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Surprise Pick")).toBeInTheDocument();
+    });
+  });
+
+  it("refreshes suggestions and applies a new preset mix automatically", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "presetshare");
+    await waitFor(() => {
+      expect(screen.getByText("Discovery shortcuts")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh suggestions" }));
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "presetshare",
+          synth: "Vital",
+          genre: "Dubstep",
+          type: "Pad",
+          sort: "most-liked"
         })
       );
     });
@@ -308,6 +360,45 @@ describe("PresetsPage", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Indexed Pad")).toBeInTheDocument();
+    });
+  });
+
+  it("imports a local preset folder and refreshes local results", async () => {
+    const user = userEvent.setup();
+    mockImportPresetLibrary.mockResolvedValue({
+      kind: "presets",
+      requested_path: "/Users/kylechan/Presets",
+      effective_path: "/Users/kylechan/Presets",
+      added: true,
+      roots: ["/Users/kylechan/Presets"],
+      import_result: {
+        ingested_count: 5,
+        scanned_files: 6,
+        parse_failed_count: 1
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText("Import preset folder path"), "/Users/kylechan/Presets");
+    await user.click(screen.getByRole("button", { name: "Import presets" }));
+
+    await waitFor(() => {
+      expect(mockImportPresetLibrary).toHaveBeenCalledWith("/Users/kylechan/Presets");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("5 items indexed · 6 files scanned · 1 skipped.")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenCalledTimes(2);
     });
   });
 });

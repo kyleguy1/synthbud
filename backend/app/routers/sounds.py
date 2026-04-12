@@ -1,9 +1,10 @@
 import re
 from typing import List, Optional
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -92,9 +93,32 @@ def _is_freesound_download_url(file_url: Optional[str]) -> bool:
     return bool(file_url and FREESOUND_DOWNLOAD_RE.match(file_url))
 
 
+def _resolve_local_sound_path(sound: Sound) -> Optional[Path]:
+    if sound.source != "local-filesystem" or not sound.file_url:
+        return None
+
+    path = Path(sound.file_url).expanduser().resolve()
+    settings = get_settings()
+    allowed_roots = [Path(root).expanduser().resolve() for root in settings.sample_local_roots]
+    if not any(path.is_relative_to(root) for root in allowed_roots):
+        return None
+    if not path.exists() or not path.is_file():
+        return None
+    return path
+
+
+def _can_preview_sound(sound: Sound, preview_url: Optional[str]) -> bool:
+    if preview_url:
+        return True
+    return _resolve_local_sound_path(sound) is not None
+
+
 def _can_download_sound(sound: Sound) -> bool:
     if not sound.file_url:
         return False
+
+    if sound.source == "local-filesystem":
+        return _resolve_local_sound_path(sound) is not None
 
     if sound.source == "freesound" or _is_freesound_download_url(sound.file_url):
         return False
@@ -166,7 +190,7 @@ def list_sounds(
                     sound_id=sound.source_sound_id,
                     author=sound.author,
                 ),
-                can_preview=bool(inferred_preview_url),
+                can_preview=_can_preview_sound(sound, inferred_preview_url),
                 can_download=_can_download_sound(sound),
                 brightness=(features.spectral_centroid if features else None),
                 bpm=(features.bpm if features else None),
@@ -244,6 +268,10 @@ def stream_sound_preview(
     if sound is None:
         raise HTTPException(status_code=404, detail="Sound not found")
 
+    local_sound_path = _resolve_local_sound_path(sound)
+    if local_sound_path is not None:
+        return FileResponse(path=local_sound_path, filename=local_sound_path.name)
+
     inferred_preview_url = _infer_freesound_preview_url(sound, db)
     if inferred_preview_url:
         db.commit()
@@ -309,6 +337,10 @@ def download_sound_file(
     sound = db.get(Sound, sound_id)
     if sound is None:
         raise HTTPException(status_code=404, detail="Sound not found")
+
+    local_sound_path = _resolve_local_sound_path(sound)
+    if local_sound_path is not None:
+        return FileResponse(path=local_sound_path, filename=local_sound_path.name)
 
     if not sound.file_url:
         raise HTTPException(status_code=404, detail="No downloadable file available for this sound")

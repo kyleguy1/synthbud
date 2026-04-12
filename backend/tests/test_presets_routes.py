@@ -151,6 +151,51 @@ def test_list_presets_presetshare_source(monkeypatch):
     assert payload["items"][0]["like_count"] == 10
     assert payload["items"][0]["download_count"] == 200
     assert payload["items"][0]["comment_count"] == 3
+    assert payload["items"][0]["tags"] == ["lead", "dubstep"]
+
+
+def test_list_presets_presetshare_source_supports_metric_sorting(monkeypatch):
+    from app.routers import presets as presets_router
+
+    def fake_scrape_presets_window(**_kwargs):
+        return (
+            [
+                {
+                    "id": "100",
+                    "name": "Lower Likes",
+                    "url": "https://presetshare.com/p100",
+                    "synth": "Vital",
+                    "author": "user-a",
+                    "authorUrl": "https://presetshare.com/u/user-a",
+                    "datePosted": "Today",
+                    "likes": 4,
+                    "downloads": 300,
+                    "comments": 0,
+                    "source": "presetshare",
+                },
+                {
+                    "id": "101",
+                    "name": "Higher Likes",
+                    "url": "https://presetshare.com/p101",
+                    "synth": "Vital",
+                    "author": "user-b",
+                    "authorUrl": "https://presetshare.com/u/user-b",
+                    "datePosted": "Today",
+                    "likes": 18,
+                    "downloads": 120,
+                    "comments": 1,
+                    "source": "presetshare",
+                },
+            ],
+            False,
+        )
+
+    monkeypatch.setattr(presets_router, "scrape_presets_window", fake_scrape_presets_window)
+
+    response = client.get("/api/presets/?source=presetshare&sort=most-liked&page=1&page_size=20")
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["name"] for item in payload["items"]] == ["Higher Likes", "Lower Likes"]
 
 
 def test_sync_route_supports_presetshare_index(monkeypatch):
@@ -250,6 +295,100 @@ def test_list_presets_route_exposes_indexed_remote_metadata():
     assert payload["items"][0]["author_url"] == "https://presetshare.com/@cataloguser"
     assert payload["items"][0]["posted_label"] == "Yesterday"
     assert payload["items"][0]["like_count"] == 3
+
+
+def test_list_presets_route_sorts_indexed_results_by_downloads():
+    from app import db as db_module
+
+    class DummyResult:
+        def __init__(self, *, scalar_value=None, rows=None):
+            self.scalar_value = scalar_value
+            self.rows = rows or []
+
+        def scalar_one(self):
+            return self.scalar_value
+
+        def all(self):
+            return self.rows
+
+    def dummy_get_db():
+        rows = [
+            (
+                SimpleNamespace(
+                    id=11,
+                    name="Lower Downloads",
+                    author="cataloguser",
+                    synth_name="Serum",
+                    synth_vendor=None,
+                    tags=["Synthwave"],
+                    visibility=PresetVisibilityEnum.PUBLIC,
+                    is_redistributable=True,
+                    parse_status=PresetParseStatusEnum.PARTIAL,
+                    source_url="https://presetshare.com/p201",
+                    imported_at=1,
+                ),
+                SimpleNamespace(
+                    id=77,
+                    name="Serum Presets",
+                    author=None,
+                    synth_name="Serum",
+                    synth_vendor=None,
+                    source_url="https://presetshare.com",
+                    license_label=None,
+                    is_redistributable=True,
+                    visibility=PresetVisibilityEnum.PUBLIC,
+                ),
+                SimpleNamespace(key="presetshare-index"),
+                SimpleNamespace(raw_payload={"downloads": 44}),
+            ),
+            (
+                SimpleNamespace(
+                    id=12,
+                    name="Higher Downloads",
+                    author="cataloguser",
+                    synth_name="Serum",
+                    synth_vendor=None,
+                    tags=["Synthwave"],
+                    visibility=PresetVisibilityEnum.PUBLIC,
+                    is_redistributable=True,
+                    parse_status=PresetParseStatusEnum.PARTIAL,
+                    source_url="https://presetshare.com/p202",
+                    imported_at=2,
+                ),
+                SimpleNamespace(
+                    id=78,
+                    name="Serum Presets",
+                    author=None,
+                    synth_name="Serum",
+                    synth_vendor=None,
+                    source_url="https://presetshare.com",
+                    license_label=None,
+                    is_redistributable=True,
+                    visibility=PresetVisibilityEnum.PUBLIC,
+                ),
+                SimpleNamespace(key="presetshare-index"),
+                SimpleNamespace(raw_payload={"downloads": 144}),
+            ),
+        ]
+
+        class DummySession:
+            def execute(self, *_args, **_kwargs):
+                return DummyResult(rows=rows)
+
+            def close(self):
+                pass
+
+        yield DummySession()
+
+    app.dependency_overrides[db_module.get_db] = dummy_get_db
+    try:
+        response = client.get("/api/presets/?source=presetshare-index&sort=most-downloaded&page=1&page_size=20")
+    finally:
+        app.dependency_overrides.pop(db_module.get_db, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["name"] for item in payload["items"]] == ["Higher Downloads", "Lower Downloads"]
 
 
 def test_cache_bust_route_rejects_unknown_source():

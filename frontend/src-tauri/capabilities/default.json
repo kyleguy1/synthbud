@@ -1,0 +1,9 @@
+{
+  "identifier": "main-capability",
+  "description": "Capability for the synthbud desktop window.",
+  "windows": ["main"],
+  "permissions": ["core:default"],
+  "remote": {
+    "urls": ["http://localhost:5173", "http://127.0.0.1:5173"]
+  }
+}

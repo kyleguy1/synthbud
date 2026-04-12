@@ -1,4 +1,5 @@
 import type { FavoriteSound } from "../types";
+import { getRuntimeConfig, saveTextFile } from "./runtime";
 
 export function buildCreditsText(sounds: FavoriteSound[]): string {
   if (sounds.length === 0) {
@@ -15,15 +16,12 @@ export function buildCreditsText(sounds: FavoriteSound[]): string {
     .join("\n");
 }
 
-export function downloadCredits(sounds: FavoriteSound[]): void {
+export async function downloadCredits(sounds: FavoriteSound[]): Promise<void> {
   const text = buildCreditsText(sounds);
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "synthbud-credits.txt";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  if (getRuntimeConfig().capabilities.saveTextFile) {
+    await saveTextFile("synthbud-credits.txt", text);
+    return;
+  }
+
+  await saveTextFile("synthbud-credits.txt", text);
 }

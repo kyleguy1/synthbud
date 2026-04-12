@@ -74,7 +74,7 @@ def ingest_presetshare_index(max_pages: int = 10) -> dict[str, Any]:
                         description="Indexed online preset metadata from PresetShare.",
                     )
 
-                    tags = [value for value in [item.get("genre"), item.get("soundType")] if value]
+                    raw_tags = [value for value in [item.get("genre"), item.get("soundType")] if value]
                     parsed = ParsedPreset(
                         preset_name=item.get("name") or f"Preset {item.get('id') or 'unknown'}",
                         synth_name=synth_name,
@@ -87,7 +87,7 @@ def ingest_presetshare_index(max_pages: int = 10) -> dict[str, Any]:
                         pack=pack,
                         preset_key=str(item.get("id") or f"{page}:{ingested_count}"),
                         parsed=parsed,
-                        tags=tags,
+                        raw_tags=raw_tags,
                         source_url=item.get("url"),
                         parser_version="presetshare-index-0.1",
                     )

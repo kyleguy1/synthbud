@@ -132,7 +132,7 @@ def test_classify_local_preset_file_uses_bank_folder_and_nested_tags(tmp_path: P
     assert classified.discovery is not None
     assert classified.discovery.bank_name == "My Bank"
     assert classified.discovery.bank_external_id == "local:serum:my-bank"
-    assert classified.discovery.tags == ("my bank", "serum", "warm pads")
+    assert classified.discovery.raw_tags == ("my bank", "serum", "warm pads")
 
 
 def test_get_or_create_preset_pack_upgrades_legacy_local_external_id():
@@ -181,6 +181,7 @@ def test_ingest_local_presets_is_idempotent(monkeypatch, tmp_path: Path):
     assert len(session.store[Preset]) == 1
     assert len(session.store[PresetFile]) == 1
     assert session.store[PresetPack][0].external_id == "local:serum:my-bank"
+    assert session.store[Preset][0].raw_tags == ["my bank", "serum"]
     assert len(session.store[IngestionRun]) == 2
 
 
@@ -203,9 +204,10 @@ def test_ingest_local_presets_keeps_duplicate_hashes_in_multiple_banks(monkeypat
 def test_ingest_local_presets_reports_skips(monkeypatch, tmp_path: Path):
     _write_serum_fixture(tmp_path / "serum" / "My Bank" / "Lead 01.fxp")
     _write_serum_fixture(tmp_path / "serum" / "My Bank" / "Factory.fxb")
-    unsupported = tmp_path / "vital" / "Factory" / "Patch.vital"
+    # Use a synth that has no registered handler (Phase Plant)
+    unsupported = tmp_path / "phase-plant" / "Factory" / "Patch.phaseplant"
     unsupported.parent.mkdir(parents=True, exist_ok=True)
-    unsupported.write_text("noop", encoding="utf-8")
+    unsupported.write_bytes(b"noop")
 
     session = FakeSession()
     _monkeypatch_ingestor(monkeypatch, session, tmp_path)
@@ -217,3 +219,17 @@ def test_ingest_local_presets_reports_skips(monkeypatch, tmp_path: Path):
     assert result["parse_failed_count"] == 0
     assert result["skipped_unsupported_synth_count"] == 1
     assert result["skipped_unsupported_extension_count"] == 1
+
+
+def test_ingest_local_presets_stores_canonical_and_raw_tags(monkeypatch, tmp_path: Path):
+    preset_path = tmp_path / "serum" / "My Bank" / "Warm Pads" / "Lead 01.fxp"
+    _write_serum_fixture(preset_path)
+
+    session = FakeSession()
+    _monkeypatch_ingestor(monkeypatch, session, tmp_path)
+
+    local_library_ingestor.ingest_local_presets()
+
+    preset = session.store[Preset][0]
+    assert preset.raw_tags == ["my bank", "serum", "warm pads"]
+    assert preset.tags == ["synth", "pad", "warm"]

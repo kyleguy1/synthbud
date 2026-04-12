@@ -248,19 +248,12 @@ def get_preset_detail(
 def sync_presets(
     source: str = Query("presetshare-index"),
     max_pages: int = Query(10, ge=1, le=250),
-    synth: str = Query("vital", description="Synth platform filter (patchstorage only)."),
 ) -> dict:
     normalized_source = source.strip().lower()
-    if normalized_source == "presetshare-index":
-        return ingest_presetshare_index(max_pages=max_pages)
-    if normalized_source == "patchstorage":
-        from app.ingestion.presets.patchstorage_ingestor import ingest_patchstorage
+    if normalized_source != "presetshare-index":
+        raise HTTPException(status_code=400, detail="Only presetshare-index sync is supported.")
 
-        return ingest_patchstorage(synth_name=synth, max_pages=max_pages)
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unsupported sync source: {source}. Use 'presetshare-index' or 'patchstorage'.",
-    )
+    return ingest_presetshare_index(max_pages=max_pages)
 
 
 @router.post("/cache-bust")

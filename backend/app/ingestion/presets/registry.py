@@ -7,7 +7,6 @@ import re
 
 from .base import ParsedPreset
 from .serum_parser import parse_serum_preset
-from .vital_parser import parse_vital_preset
 
 
 PresetParser = Callable[[Path], ParsedPreset]
@@ -46,16 +45,7 @@ SERUM_HANDLER = PresetSynthHandler(
     parser=parse_serum_preset,
 )
 
-VITAL_HANDLER = PresetSynthHandler(
-    synth_key="vital",
-    display_name="Vital",
-    vendor="Matt Tytel",
-    folder_aliases=("vital", "vital-synth", "vitalium"),
-    supported_extensions=(".vital",),
-    parser=parse_vital_preset,
-)
-
-REGISTERED_SYNTH_HANDLERS: tuple[PresetSynthHandler, ...] = (SERUM_HANDLER, VITAL_HANDLER)
+REGISTERED_SYNTH_HANDLERS: tuple[PresetSynthHandler, ...] = (SERUM_HANDLER,)
 
 
 def resolve_synth_handler(folder_name: str) -> PresetSynthHandler | None:

@@ -1,6 +1,8 @@
 import re
-from typing import List, Optional
+from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
+from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +10,15 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audio import (
+    build_local_waveform_source_key,
+    build_remote_waveform_source_key,
+    compute_waveform_peaks,
+    get_audio_duration_sec,
+    load_audio_file_to_array,
+    load_audio_url_to_array,
+    resample_waveform_peaks,
+)
 from app.config import get_settings
 from app.db import get_db
 from app.ingestion.freesound_client import FreesoundClient
@@ -17,7 +28,13 @@ from app.ingestion.freesound_ingestor import (
     normalize_freesound_source_page_url,
 )
 from app.models import Sound, SoundFeatures
-from app.schemas import PaginatedResponse, SoundDetail, SoundFeatures as SoundFeaturesSchema, SoundSummary
+from app.schemas import (
+    PaginatedResponse,
+    SoundDetail,
+    SoundFeatures as SoundFeaturesSchema,
+    SoundSummary,
+    SoundWaveform,
+)
 from app.services.search import build_sound_search_query
 
 
@@ -28,6 +45,8 @@ FREESOUND_PREVIEW_RE = re.compile(
     r"^https://cdn\.freesound\.org/previews/(?P<bucket>\d+)/(?P<sound_id>\d+)_(?P<token>\d+)-(?P<quality>hq|lq)\.mp3$"
 )
 FREESOUND_DOWNLOAD_RE = re.compile(r"^https://freesound\.org/apiv2/sounds/\d+/download/?$")
+DEFAULT_WAVEFORM_BINS = 72
+MAX_WAVEFORM_BINS = 256
 
 
 def _extract_freesound_owner(source_page_url: Optional[str]) -> Optional[str]:
@@ -105,6 +124,135 @@ def _resolve_local_sound_path(sound: Sound) -> Optional[Path]:
     if not path.exists() or not path.is_file():
         return None
     return path
+
+
+def _resolve_or_fetch_preview_url(sound: Sound, db: Session) -> Optional[str]:
+    existing_preview_url = sound.preview_url
+    inferred_preview_url = _infer_freesound_preview_url(sound, db)
+    if inferred_preview_url:
+        if existing_preview_url != inferred_preview_url:
+            db.commit()
+        return inferred_preview_url
+
+    if sound.preview_url:
+        return sound.preview_url
+
+    if sound.source != "freesound":
+        return None
+
+    settings = get_settings()
+    if settings.freesound_api_token in ("...", "your_freesound_token_here"):
+        raise HTTPException(
+            status_code=503,
+            detail="Freesound token is not configured on the backend",
+        )
+
+    try:
+        payload = FreesoundClient.from_settings().get_sound(
+            int(sound.source_sound_id),
+            fields=["id", "previews", "download", "url", "username"],
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Preview lookup timed out upstream. Please try again in a moment.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Preview lookup failed upstream. Please try again in a moment.",
+        ) from exc
+
+    preview_url = extract_preview_url(payload)
+    if not preview_url:
+        return None
+
+    sound.preview_url = preview_url
+    sound.file_url = payload.get("download") or sound.file_url
+    sound.author = extract_author(payload) or sound.author
+    sound.source_page_url = normalize_freesound_source_page_url(
+        payload.get("url") or sound.source_page_url,
+        sound_id=sound.source_sound_id,
+        author=sound.author,
+    )
+    db.commit()
+    return preview_url
+
+
+@lru_cache(maxsize=256)
+def _build_local_waveform(file_path: str, source_key: str, bins: int, target_sr: int) -> tuple[float, tuple[float, ...]]:
+    del source_key
+    audio = load_audio_file_to_array(Path(file_path), target_sr)
+    duration_sec = get_audio_duration_sec(audio, target_sr)
+    return duration_sec, tuple(compute_waveform_peaks(audio, bins))
+
+
+@lru_cache(maxsize=256)
+def _build_remote_waveform(preview_url: str, source_key: str, bins: int, target_sr: int) -> tuple[float, tuple[float, ...]]:
+    del source_key
+    audio = load_audio_url_to_array(preview_url, target_sr)
+    duration_sec = get_audio_duration_sec(audio, target_sr)
+    return duration_sec, tuple(compute_waveform_peaks(audio, bins))
+
+
+def _clear_waveform_cache() -> None:
+    _build_local_waveform.cache_clear()
+    _build_remote_waveform.cache_clear()
+
+
+def _get_default_waveform_bins() -> int:
+    configured_bins = getattr(get_settings(), "waveform_default_bins", DEFAULT_WAVEFORM_BINS)
+    return min(MAX_WAVEFORM_BINS, max(16, configured_bins or DEFAULT_WAVEFORM_BINS))
+
+
+def _ensure_sound_features_instance(db: Session, sound: Sound) -> SoundFeatures:
+    features = getattr(sound, "features", None)
+    if features is None:
+        features = SoundFeatures(sound_id=sound.id)
+        setattr(sound, "features", features)
+        db.add(features)
+    return features
+
+
+def _get_cached_waveform(sound: Sound, source_key: str, bins: int) -> Optional[tuple[Optional[float], list[float]]]:
+    features = getattr(sound, "features", None)
+    if features is None:
+        return None
+
+    cached_peaks = getattr(features, "waveform_peaks", None)
+    cached_bins = getattr(features, "waveform_bins", None)
+    cached_source_key = getattr(features, "waveform_source_key", None)
+    if not cached_peaks or not cached_bins or cached_source_key != source_key:
+        return None
+
+    duration_sec = getattr(features, "waveform_duration_sec", None)
+    if duration_sec is None:
+        duration_sec = sound.duration_sec
+
+    peaks = (
+        [float(peak) for peak in cached_peaks]
+        if cached_bins == bins
+        else resample_waveform_peaks(cached_peaks, bins)
+    )
+    return duration_sec, peaks
+
+
+def _persist_waveform(
+    db: Session,
+    sound: Sound,
+    *,
+    source_key: str,
+    peaks: tuple[float, ...],
+    bins: int,
+    duration_sec: float,
+) -> None:
+    features = _ensure_sound_features_instance(db, sound)
+    features.waveform_peaks = [float(peak) for peak in peaks]
+    features.waveform_bins = bins
+    features.waveform_duration_sec = duration_sec
+    features.waveform_source_key = source_key
+    features.waveform_analyzed_at = datetime.now(UTC)
+    db.commit()
 
 
 def _can_preview_sound(sound: Sound, preview_url: Optional[str]) -> bool:
@@ -259,6 +407,91 @@ def get_sound_detail(
     )
 
 
+@router.get("/{sound_id}/waveform", response_model=SoundWaveform)
+def get_sound_waveform(
+    sound_id: int,
+    bins: int = Query(DEFAULT_WAVEFORM_BINS, ge=1, le=MAX_WAVEFORM_BINS),
+    db: Session = Depends(get_db),
+) -> SoundWaveform:
+    sound = db.get(Sound, sound_id)
+    if sound is None:
+        raise HTTPException(status_code=404, detail="Sound not found")
+
+    target_sr = get_settings().feature_sample_rate
+    default_bins = _get_default_waveform_bins()
+    local_sound_path = _resolve_local_sound_path(sound)
+    source_key: Optional[str] = None
+    preview_url: Optional[str] = None
+
+    if local_sound_path is not None:
+        source_key = build_local_waveform_source_key(local_sound_path)
+    else:
+        preview_url = _resolve_or_fetch_preview_url(sound, db)
+        if not preview_url:
+            raise HTTPException(status_code=404, detail="No preview available for waveform extraction")
+        source_key = build_remote_waveform_source_key(preview_url)
+
+    cached_waveform = _get_cached_waveform(sound, source_key, bins)
+    if cached_waveform is not None:
+        cached_duration_sec, cached_peaks = cached_waveform
+        return SoundWaveform(
+            sound_id=sound.id,
+            bins=bins,
+            duration_sec=sound.duration_sec if sound.duration_sec is not None else cached_duration_sec,
+            peaks=cached_peaks,
+        )
+
+    try:
+        if local_sound_path is not None:
+            duration_sec, peaks = _build_local_waveform(
+                str(local_sound_path),
+                source_key,
+                default_bins,
+                target_sr,
+            )
+        else:
+            duration_sec, peaks = _build_remote_waveform(preview_url, source_key, default_bins, target_sr)
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Waveform generation timed out while fetching preview audio.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Waveform generation failed while fetching preview audio.",
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Preview audio could not be decoded for waveform extraction.",
+        ) from exc
+
+    _persist_waveform(
+        db,
+        sound,
+        source_key=source_key,
+        peaks=peaks,
+        bins=default_bins,
+        duration_sec=duration_sec,
+    )
+
+    requested_peaks = list(peaks) if bins == default_bins else resample_waveform_peaks(peaks, bins)
+    return SoundWaveform(
+        sound_id=sound.id,
+        bins=bins,
+        duration_sec=sound.duration_sec if sound.duration_sec is not None else duration_sec,
+        peaks=requested_peaks,
+    )
+
+
 @router.get("/{sound_id}/preview")
 def stream_sound_preview(
     sound_id: int,
@@ -272,60 +505,11 @@ def stream_sound_preview(
     if local_sound_path is not None:
         return FileResponse(path=local_sound_path, filename=local_sound_path.name)
 
-    inferred_preview_url = _infer_freesound_preview_url(sound, db)
-    if inferred_preview_url:
-        db.commit()
-        return RedirectResponse(url=inferred_preview_url)
-
-    if sound.preview_url:
-        return RedirectResponse(url=sound.preview_url)
-
-    if sound.source != "freesound":
-        raise HTTPException(status_code=404, detail="No preview available for this source")
-
-    settings = get_settings()
-    if settings.freesound_api_token in ("...", "your_freesound_token_here"):
-        raise HTTPException(
-            status_code=503,
-            detail="Freesound token is not configured on the backend",
-        )
-
-    try:
-        payload = FreesoundClient.from_settings().get_sound(
-            int(sound.source_sound_id),
-            fields=["id", "previews", "download", "url", "username"],
-        )
-    except httpx.TimeoutException as exc:
-        raise HTTPException(
-            status_code=504,
-            detail="Preview lookup timed out upstream. Please try again in a moment.",
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="Preview lookup failed upstream. Please try again in a moment.",
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=f"Failed to fetch upstream metadata ({exc.response.status_code})",
-        ) from exc
-
-    preview_url = extract_preview_url(payload)
+    preview_url = _resolve_or_fetch_preview_url(sound, db)
     if not preview_url:
+        if sound.source != "freesound":
+            raise HTTPException(status_code=404, detail="No preview available for this source")
         raise HTTPException(status_code=404, detail="No preview URL available for this sound")
-
-    # Persist metadata so subsequent requests avoid upstream calls.
-    sound.preview_url = preview_url
-    sound.file_url = payload.get("download") or sound.file_url
-    sound.author = extract_author(payload) or sound.author
-    sound.source_page_url = normalize_freesound_source_page_url(
-        payload.get("url") or sound.source_page_url,
-        sound_id=sound.source_sound_id,
-        author=sound.author,
-    )
-    db.commit()
-
     return RedirectResponse(url=preview_url)
 
 

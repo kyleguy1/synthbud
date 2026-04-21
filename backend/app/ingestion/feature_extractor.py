@@ -1,39 +1,32 @@
-from datetime import datetime
-from typing import Iterable
+from __future__ import annotations
 
-import librosa
-import numpy as np
-import soundfile as sf
-import httpx
+from datetime import UTC, datetime
+
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.audio import (
+    build_remote_waveform_source_key,
+    compute_waveform_peaks,
+    get_audio_duration_sec,
+    load_audio_dependencies,
+    load_audio_url_to_array,
+)
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Sound, SoundFeatures
 
 
 def _download_audio_to_array(url: str, sr: int) -> np.ndarray:
-    """
-    Download audio from URL and decode to a mono numpy array at target sample rate.
-    """
-    with httpx.Client(timeout=20.0) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
-        audio_bytes = resp.content
-
-    # Decode using soundfile then resample with librosa
-    data, original_sr = sf.read(io.BytesIO(audio_bytes))  # type: ignore[name-defined]
-    if data.ndim > 1:
-        data = np.mean(data, axis=1)
-    if original_sr != sr:
-        data = librosa.resample(y=data, orig_sr=original_sr, target_sr=sr)
-    return data
+    """Download audio from URL and decode to a mono numpy array at target sample rate."""
+    return load_audio_url_to_array(url, sr)
 
 
 def _compute_features(y: np.ndarray, sr: int) -> dict:
     """
     Compute basic spectral and loudness-related features.
     """
+    librosa, np, _sf = load_audio_dependencies()
     if y.size == 0:
         return {}
 
@@ -81,21 +74,47 @@ def _ensure_sound_features_instance(db: Session, sound: Sound) -> SoundFeatures:
     return sound.features
 
 
+def _store_waveform(
+    features: SoundFeatures,
+    *,
+    sound: Sound,
+    preview_url: str,
+    audio: np.ndarray,
+    bins: int,
+    sample_rate: int,
+) -> None:
+    features.waveform_peaks = compute_waveform_peaks(audio, bins)
+    features.waveform_bins = bins
+    features.waveform_duration_sec = sound.duration_sec if sound.duration_sec is not None else get_audio_duration_sec(audio, sample_rate)
+    features.waveform_source_key = build_remote_waveform_source_key(preview_url)
+    features.waveform_analyzed_at = datetime.now(UTC)
+
+
 def process_pending_sounds(batch_size: int | None = None) -> None:
     """
-    Process sounds that lack analyzed features.
+    Process sounds that lack analyzed features or cached waveforms.
 
-    Downloads previews and computes basic audio features, updating
-    the sound_features table.
+    Downloads previews and computes audio features plus a default cached
+    waveform, updating the sound_features table.
     """
     settings = get_settings()
     target_sr = settings.feature_sample_rate
+    waveform_bins = min(256, max(16, settings.waveform_default_bins or 72))
 
     with SessionLocal() as db:
         query = (
             db.query(Sound)
             .outerjoin(SoundFeatures)
-            .filter((Sound.features == None) | (SoundFeatures.analyzed_at == None))  # type: ignore[comparison-overlap]
+            .filter(  # type: ignore[comparison-overlap]
+                or_(
+                    Sound.features == None,
+                    SoundFeatures.analyzed_at == None,
+                    SoundFeatures.waveform_peaks == None,
+                    SoundFeatures.waveform_bins != waveform_bins,
+                    SoundFeatures.waveform_source_key == None,
+                    SoundFeatures.waveform_analyzed_at == None,
+                )
+            )
             .filter(Sound.preview_url.isnot(None))
             .limit(batch_size or settings.feature_batch_size)
         )
@@ -110,13 +129,25 @@ def process_pending_sounds(batch_size: int | None = None) -> None:
                 sf_row = _ensure_sound_features_instance(db, sound)
                 for key, value in feats.items():
                     setattr(sf_row, key, value)
+                _store_waveform(
+                    sf_row,
+                    sound=sound,
+                    preview_url=sound.preview_url,
+                    audio=y,
+                    bins=waveform_bins,
+                    sample_rate=target_sr,
+                )
+
+                analysis_duration_sec = (
+                    sound.duration_sec if sound.duration_sec is not None else get_audio_duration_sec(y, target_sr)
+                )
 
                 # Simple heuristic for loops
-                if sound.duration_sec and 1.0 <= sound.duration_sec <= 16.0:
+                if analysis_duration_sec and 1.0 <= analysis_duration_sec <= 16.0:
                     tags = [t.lower() for t in (sound.tags or [])]
                     sf_row.is_loop = "loop" in tags
 
-                sf_row.analyzed_at = datetime.utcnow()
+                sf_row.analyzed_at = datetime.now(UTC)
                 db.commit()
             except Exception:
                 db.rollback()
@@ -125,4 +156,3 @@ def process_pending_sounds(batch_size: int | None = None) -> None:
 
 if __name__ == "__main__":
     process_pending_sounds()
-

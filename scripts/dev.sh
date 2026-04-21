@@ -112,6 +112,33 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 ensure_postgres
+
+resolve_backend_database_url() {
+  if [[ -n "${SYNTHBUD_DATABASE_URL:-}" ]]; then
+    printf '%s\n' "$SYNTHBUD_DATABASE_URL"
+    return 0
+  fi
+
+  if [[ -f "$ROOT_DIR/backend/.env" ]]; then
+    local env_database_url
+    env_database_url="$(grep -E '^SYNTHBUD_DATABASE_URL=' "$ROOT_DIR/backend/.env" | tail -n 1 | cut -d= -f2-)"
+    if [[ -n "$env_database_url" ]]; then
+      printf '%s\n' "$env_database_url"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' 'postgresql+psycopg2://postgres:postgres@localhost:5433/synthbud'
+}
+
+echo "Applying backend migrations..."
+(
+  cd "$ROOT_DIR"
+  SYNTHBUD_DATABASE_URL="$(resolve_backend_database_url)" \
+    PYTHONPATH="$ROOT_DIR/backend" \
+    ./backend/.venv/bin/alembic -c backend/alembic.ini upgrade head
+)
+
 ensure_backend_port_ready
 
 if backend_health_ok; then

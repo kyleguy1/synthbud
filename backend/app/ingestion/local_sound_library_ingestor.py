@@ -7,6 +7,13 @@ from typing import Iterable
 import hashlib
 import re
 
+from app.audio import (
+    build_local_waveform_source_key,
+    compute_waveform_peaks,
+    get_audio_duration_sec,
+    load_audio_dependencies,
+    load_audio_file_to_array,
+)
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import IngestionRun, IngestionStatusEnum, Sound, SoundFeatures
@@ -80,35 +87,25 @@ def _build_source_sound_id(file_path: Path) -> str:
 
 def _load_audio_dependencies():
     try:
-        import librosa
-        import numpy as np
-        import soundfile as sf
-    except ModuleNotFoundError as exc:  # pragma: no cover - environment specific
+        _librosa, _np, sf = load_audio_dependencies()
+    except RuntimeError as exc:  # pragma: no cover - environment specific
         raise RuntimeError(
             "Local sample imports require optional audio dependencies. Install backend requirements first."
         ) from exc
 
     from .feature_extractor import _compute_features
 
-    return librosa, np, sf, _compute_features
+    return sf, _compute_features
 
 
-def _read_audio_features(file_path: Path, target_sr: int) -> dict:
-    librosa, np, sf, compute_features = _load_audio_dependencies()
-    info = sf.SoundFile(str(file_path))
-    try:
-        data = info.read(dtype="float32", always_2d=False)
-    finally:
-        info.close()
-
-    if isinstance(data, np.ndarray) and data.ndim > 1:
-        data = np.mean(data, axis=1)
-    if not isinstance(data, np.ndarray):
-        data = np.asarray(data, dtype=np.float32)
-    if info.samplerate != target_sr:
-        data = librosa.resample(y=data, orig_sr=info.samplerate, target_sr=target_sr)
-
-    return compute_features(data, target_sr)
+def _analyze_audio_file(file_path: Path, target_sr: int, waveform_bins: int) -> tuple[dict, list[float], float]:
+    _, compute_features = _load_audio_dependencies()
+    data = load_audio_file_to_array(file_path, target_sr)
+    return (
+        compute_features(data, target_sr),
+        compute_waveform_peaks(data, waveform_bins),
+        get_audio_duration_sec(data, target_sr),
+    )
 
 
 def _ensure_sound_features_instance(sound: Sound) -> SoundFeatures:
@@ -118,11 +115,12 @@ def _ensure_sound_features_instance(sound: Sound) -> SoundFeatures:
 
 
 def ingest_local_sounds(limit: int | None = None) -> dict:
-    _librosa, _np, sf, _compute_features = _load_audio_dependencies()
+    sf, _ = _load_audio_dependencies()
     settings = get_settings()
     roots = [Path(path).expanduser().resolve() for path in settings.sample_local_roots]
     allowlist = {ext.lower() for ext in settings.sample_file_extensions_allowlist}
     target_sr = settings.feature_sample_rate
+    waveform_bins = min(256, max(16, settings.waveform_default_bins or 72))
 
     scanned_files = 0
     ingested = 0
@@ -182,10 +180,21 @@ def ingest_local_sounds(limit: int | None = None) -> dict:
 
                         db.flush()
 
-                        feature_values = _read_audio_features(file_path, target_sr)
+                        feature_values, waveform_peaks, analyzed_duration_sec = _analyze_audio_file(
+                            file_path,
+                            target_sr,
+                            waveform_bins,
+                        )
                         features = _ensure_sound_features_instance(sound)
                         for key, value in feature_values.items():
                             setattr(features, key, value)
+                        features.waveform_peaks = waveform_peaks
+                        features.waveform_bins = waveform_bins
+                        features.waveform_duration_sec = (
+                            sound.duration_sec if sound.duration_sec is not None else analyzed_duration_sec
+                        )
+                        features.waveform_source_key = build_local_waveform_source_key(file_path)
+                        features.waveform_analyzed_at = datetime.now(UTC)
                         if sound.duration_sec and 1.0 <= sound.duration_sec <= 16.0:
                             lowered_tags = [tag.lower() for tag in (sound.tags or [])]
                             features.is_loop = "loop" in lowered_tags

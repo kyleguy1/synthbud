@@ -8,6 +8,7 @@ import type {
   SearchFilters,
   SoundDetail,
   SoundSummary,
+  SoundWaveform,
   TagFacet
 } from "../types";
 import { getApiBaseUrl } from "../lib/runtime";
@@ -79,6 +80,11 @@ export async function listPresetTagFacets(source?: string): Promise<TagFacet[]> 
 
 export async function getSoundDetail(soundId: number): Promise<SoundDetail> {
   return request<SoundDetail>(`/api/sounds/${soundId}`);
+}
+
+export async function getSoundWaveform(soundId: number, bins = 72): Promise<SoundWaveform> {
+  const normalizedBins = Number.isFinite(bins) ? Math.min(240, Math.max(16, Math.round(bins))) : 72;
+  return request<SoundWaveform>(`/api/sounds/${soundId}/waveform?bins=${normalizedBins}`);
 }
 
 export async function listPresets(filters: PresetFilters): Promise<PaginatedResponse<PresetSummary>> {

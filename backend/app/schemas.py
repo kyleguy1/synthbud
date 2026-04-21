@@ -56,6 +56,13 @@ class SoundDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SoundWaveform(BaseModel):
+    sound_id: int
+    bins: int
+    duration_sec: Optional[float] = None
+    peaks: List[float] = []
+
+
 class PresetPackSummary(BaseModel):
     id: int
     name: str

@@ -49,6 +49,10 @@ interface PresetSuggestion {
   filters: Partial<PresetFilters>;
 }
 
+interface SuggestionApplyOptions {
+  sourceOverride?: PresetFilters["source"];
+}
+
 function pickRotatingValue(values: string[], index: number): string {
   if (values.length === 0) {
     return "";
@@ -131,10 +135,17 @@ function buildFeaturedSuggestions(params: {
   ];
 }
 
-function applySuggestionToFilters(current: PresetFilters, suggestion: PresetSuggestion): PresetFilters {
-  if (current.source === "local-filesystem") {
+function applySuggestionToFilters(
+  current: PresetFilters,
+  suggestion: PresetSuggestion,
+  options: SuggestionApplyOptions = {}
+): PresetFilters {
+  const nextSource = options.sourceOverride ?? suggestion.filters.source ?? current.source;
+
+  if (nextSource === "local-filesystem") {
     return {
       ...current,
+      source: nextSource,
       q: "",
       synth: suggestion.filters.synth ?? "",
       pack: suggestion.filters.pack ?? "",
@@ -149,6 +160,7 @@ function applySuggestionToFilters(current: PresetFilters, suggestion: PresetSugg
 
   return {
     ...current,
+    source: nextSource,
     q: "",
     synth: suggestion.filters.synth ?? "",
     genre: suggestion.filters.genre ?? "",
@@ -354,8 +366,17 @@ export function PresetsPage() {
     }
   }
 
+  function handleResetFilters() {
+    setFilters({ ...DEFAULT_FILTERS });
+    setSuggestionSeed(0);
+    setSurprisePresetId(null);
+    setSyncMessage(null);
+    setSyncError(null);
+  }
+
   function handleSuggestionClick(suggestion: PresetSuggestion) {
-    setFilters((prev) => applySuggestionToFilters(prev, suggestion));
+    const sourceOverride = showIndexedRemoteLibrary && total === 0 ? "presetshare" : undefined;
+    setFilters((prev) => applySuggestionToFilters(prev, suggestion, { sourceOverride }));
     setSurprisePresetId(null);
   }
 
@@ -371,7 +392,8 @@ export function PresetsPage() {
     });
     setSuggestionSeed(nextSeed);
     if (nextSuggestions[0]) {
-      setFilters((prev) => applySuggestionToFilters(prev, nextSuggestions[0]));
+      const sourceOverride = showIndexedRemoteLibrary && total === 0 ? "presetshare" : undefined;
+      setFilters((prev) => applySuggestionToFilters(prev, nextSuggestions[0], { sourceOverride }));
       setSurprisePresetId(null);
     }
   }
@@ -650,6 +672,16 @@ export function PresetsPage() {
               </label>
             ) : null}
           </section>
+
+          <div className="preset-filter-actions">
+            <button
+              type="button"
+              className="preset-secondary-button preset-reset-button"
+              onClick={handleResetFilters}
+            >
+              Reset filters
+            </button>
+          </div>
 
           <LocalLibraryImportPanel
             title="Import preset folder"

@@ -150,6 +150,16 @@ function buildPresetshareIndexResponse() {
   };
 }
 
+function buildEmptyResponse() {
+  return {
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 20,
+    has_next: false
+  };
+}
+
 describe("PresetsPage", () => {
   beforeEach(() => {
     mockListSynths.mockImplementation(async (source?: string) =>
@@ -360,6 +370,119 @@ describe("PresetsPage", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Indexed Pad")).toBeInTheDocument();
+    });
+  });
+
+  it("opens live online results from discovery shortcuts when the indexed catalog is empty", async () => {
+    const user = userEvent.setup();
+    mockListPresets.mockImplementation(async (filters: { source: string; page?: number }) => {
+      if (filters.source === "presetshare-index") {
+        return buildEmptyResponse();
+      }
+      if (filters.source === "presetshare") {
+        return {
+          ...buildPresetshareResponse(),
+          page: filters.page ?? 1
+        };
+      }
+      return buildLocalResponse();
+    });
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "presetshare-index");
+
+    await waitFor(() => {
+      expect(screen.getByText("No indexed online presets yet. Run a sync to build the searchable catalog.")).toBeInTheDocument();
+    });
+
+    const [firstSuggestion] = Array.from(document.querySelectorAll<HTMLButtonElement>(".preset-suggestion-chip"));
+    expect(firstSuggestion).toBeTruthy();
+    await user.click(firstSuggestion!);
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "presetshare",
+          sort: "most-liked"
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Neuro Lead")).toBeInTheDocument();
+    });
+  });
+
+  it("can reset the preset filters back to the defaults", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PresetsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "presetshare");
+
+    await waitFor(() => {
+      expect(screen.getByText("Search live presets without importing files first")).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Synth"), "Vital");
+    await user.selectOptions(screen.getByLabelText("Genre"), "Dubstep");
+    await user.selectOptions(screen.getByLabelText("Sound type"), "Lead");
+    await user.selectOptions(screen.getByLabelText("Sort"), "most-liked");
+    await user.selectOptions(screen.getByLabelText("Page size"), "50");
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "presetshare",
+          synth: "Vital",
+          genre: "Dubstep",
+          type: "Lead",
+          sort: "most-liked",
+          pageSize: 50
+        })
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "Reset filters" }));
+
+    await waitFor(() => {
+      expect(mockListPresets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          source: "local-filesystem",
+          q: "",
+          synth: "",
+          genre: "",
+          type: "",
+          pack: "",
+          visibility: "",
+          redistributableOnly: false,
+          sort: "default",
+          page: 1,
+          pageSize: 20
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Wide Lead")).toBeInTheDocument();
+      expect(screen.getByLabelText("Bank")).toBeInTheDocument();
     });
   });
 

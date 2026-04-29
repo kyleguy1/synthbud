@@ -31,7 +31,8 @@ vi.mock("../state/PlayerContext", () => ({
   usePlayer: () => ({
     state: { sound: null, isPlaying: false, currentTime: 0, duration: 0, error: null },
     playSound: vi.fn(),
-    togglePlayPause: vi.fn()
+    togglePlayPause: vi.fn(),
+    seekTo: vi.fn()
   })
 }));
 

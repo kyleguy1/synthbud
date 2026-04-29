@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { canShowDownloadLink, getDownloadUrl, getFreesoundSourceUrl } from "../api/client";
+import { useSoundWaveform } from "../hooks/useSoundWaveform";
 import { ExternalLink } from "./ExternalLink";
+import { SoundWaveform } from "./SoundWaveform";
 import { formatDuration } from "../lib/format";
 import type { SoundSummary } from "../types";
 
@@ -9,6 +11,8 @@ interface SoundCardProps {
   isFavorite: boolean;
   isActive: boolean;
   isPlaying: boolean;
+  currentTime?: number;
+  playbackDuration?: number;
   onToggleFavorite: (sound: SoundSummary) => void;
   onPreviewToggle: (sound: SoundSummary) => void;
 }
@@ -18,6 +22,8 @@ export function SoundCard({
   isFavorite,
   isActive,
   isPlaying,
+  currentTime = 0,
+  playbackDuration = 0,
   onToggleFavorite,
   onPreviewToggle
 }: SoundCardProps) {
@@ -34,6 +40,22 @@ export function SoundCard({
     { label: "Brightness", value: sound.brightness != null ? `${Math.round(sound.brightness)} Hz` : null },
     { label: "BPM", value: sound.bpm != null ? String(Math.round(sound.bpm)) : null }
   ].filter((item) => item.value);
+  const waveform = useSoundWaveform({
+    soundId: isActive ? sound.id : null,
+    enabled: isActive && hasPreview,
+    bins: 72
+  });
+  const effectiveDuration = playbackDuration > 0
+    ? playbackDuration
+    : waveform.data?.duration_sec ?? sound.duration_sec ?? 0;
+  const waveformProgress = effectiveDuration > 0 ? Math.min(1, currentTime / effectiveDuration) : 0;
+  const waveformStatus = waveform.error
+    ? "Waveform unavailable"
+    : waveform.loading && !waveform.data
+      ? "Loading waveform"
+      : isPlaying
+        ? "Previewing"
+        : "Preview paused";
 
   useEffect(() => {
     const updateOverflow = () => {
@@ -139,6 +161,27 @@ export function SoundCard({
           </ExternalLink>
         ) : null}
       </div>
+
+      {isActive && hasPreview ? (
+        <div className="sound-waveform-shell">
+          <div className="sound-waveform-meta">
+            <span>{waveformStatus}</span>
+            {effectiveDuration > 0 ? (
+              <span>
+                {formatDuration(currentTime)} / {formatDuration(effectiveDuration)}
+              </span>
+            ) : null}
+          </div>
+          <SoundWaveform
+            peaks={waveform.data?.peaks ?? null}
+            progress={waveformProgress}
+            isPlaying={isPlaying}
+            loading={waveform.loading}
+            error={waveform.error}
+            onRetry={waveform.error ? waveform.reload : undefined}
+          />
+        </div>
+      ) : null}
 
       <button
         type="button"

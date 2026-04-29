@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SoundCard } from "./SoundCard";
+import { resetSoundWaveformCacheForTests } from "../hooks/useSoundWaveform";
 import type { SoundSummary } from "../types";
 
 const sound: SoundSummary = {
@@ -23,6 +24,8 @@ const sound: SoundSummary = {
 describe("SoundCard", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    resetSoundWaveformCacheForTests();
   });
 
   it("renders core metadata and actions", async () => {
@@ -36,6 +39,8 @@ describe("SoundCard", () => {
         isFavorite={false}
         isActive={false}
         isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
         onToggleFavorite={onFavorite}
         onPreviewToggle={onPreviewToggle}
       />
@@ -89,6 +94,8 @@ describe("SoundCard", () => {
         isFavorite={false}
         isActive={false}
         isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
         onToggleFavorite={onFavorite}
         onPreviewToggle={onPreviewToggle}
       />
@@ -123,6 +130,8 @@ describe("SoundCard", () => {
         isFavorite={false}
         isActive={false}
         isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
         onToggleFavorite={onFavorite}
         onPreviewToggle={onPreviewToggle}
       />
@@ -146,6 +155,8 @@ describe("SoundCard", () => {
         isFavorite={false}
         isActive={false}
         isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
         onToggleFavorite={onFavorite}
         onPreviewToggle={onPreviewToggle}
       />
@@ -170,6 +181,8 @@ describe("SoundCard", () => {
         isFavorite={false}
         isActive={false}
         isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
         onToggleFavorite={onFavorite}
         onPreviewToggle={onPreviewToggle}
       />
@@ -179,5 +192,154 @@ describe("SoundCard", () => {
       "href",
       "https://freesound.org/people/Kai/sounds/661100/"
     );
+  });
+
+  it("loads a waveform only for the active sound card", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            sound_id: 1,
+            bins: 72,
+            duration_sec: 1.8,
+            peaks: Array.from({ length: 72 }, (_, index) => (index % 6) / 5)
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    render(
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive
+        isPlaying
+        currentTime={0.9}
+        playbackDuration={1.8}
+        onToggleFavorite={vi.fn()}
+        onPreviewToggle={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Loading waveform")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /Audio waveform preview/i })).toBeInTheDocument();
+    expect(screen.getByText("0:01 / 0:02")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith("http://localhost:8000/api/sounds/1/waveform?bins=72", undefined);
+    });
+  });
+
+  it("does not request a waveform for inactive cards", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive={false}
+        isPlaying={false}
+        currentTime={0}
+        playbackDuration={0}
+        onToggleFavorite={vi.fn()}
+        onPreviewToggle={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("img", { name: /Audio waveform preview/i })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("reuses cached waveform data when the active sound card remounts", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sound_id: 1,
+          bins: 72,
+          duration_sec: 1.8,
+          peaks: [0.2, 0.5, 0.9, 0.4]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const firstRender = render(
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive
+        isPlaying={false}
+        currentTime={0}
+        playbackDuration={1.8}
+        onToggleFavorite={vi.fn()}
+        onPreviewToggle={vi.fn()}
+      />
+    );
+
+    await screen.findByRole("img", { name: "Audio waveform preview" });
+    firstRender.unmount();
+
+    render(
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive
+        isPlaying={false}
+        currentTime={0}
+        playbackDuration={1.8}
+        onToggleFavorite={vi.fn()}
+        onPreviewToggle={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "Audio waveform preview" })).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows waveform errors inline and retries on demand", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("missing", {
+          status: 404,
+          statusText: "Not Found"
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sound_id: 1,
+            bins: 72,
+            duration_sec: 1.8,
+            peaks: [0.1, 0.4, 0.7, 0.3]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <SoundCard
+        sound={sound}
+        isFavorite={false}
+        isActive
+        isPlaying={false}
+        currentTime={0}
+        playbackDuration={1.8}
+        onToggleFavorite={vi.fn()}
+        onPreviewToggle={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Waveform data is not ready yet.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("img", { name: "Audio waveform preview" })).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

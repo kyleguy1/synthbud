@@ -20,6 +20,13 @@ export interface SoundDetail extends SoundSummary {
   file_url: string | null;
 }
 
+export interface SoundWaveform {
+  sound_id: number;
+  bins: number;
+  duration_sec: number | null;
+  peaks: number[];
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

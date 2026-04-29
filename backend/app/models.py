@@ -78,8 +78,15 @@ class SoundFeatures(Base):
     bpm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     key: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_loop: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    waveform_peaks: Mapped[Optional[list[float]]] = mapped_column(JSON, nullable=True)
+    waveform_bins: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    waveform_duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    waveform_source_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     analyzed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    waveform_analyzed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

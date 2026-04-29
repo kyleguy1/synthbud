@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     # Feature extraction
     feature_sample_rate: int = 22_050
     feature_batch_size: int = 16
+    waveform_default_bins: int = 72
 
     # Preset ingestion
     sample_local_roots: List[str] = Field(

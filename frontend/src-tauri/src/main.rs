@@ -185,7 +185,12 @@ fn build_production_backend_command(
     let candidate = resource_dir.join("bin").join("synthbud-backend");
     if candidate.exists() {
         let mut command = Command::new(candidate);
-        configure_backend_command(&mut command, runtime, Some(resource_dir.join("backend")));
+        // The PyInstaller-frozen backend doesn't need a backend source root —
+        // its app/, alembic/, and alembic.ini are unpacked into _MEIPASS at
+        // runtime. We pass None to skip setting SYNTHBUD_DESKTOP_BACKEND_ROOT
+        // so resolve_backend_roots() falls through to the _MEIPASS branch.
+        configure_backend_command(&mut command, runtime, None);
+        apply_bundled_postgres_env(&mut command, &resource_dir);
         return Ok(command);
     }
 
@@ -193,6 +198,29 @@ fn build_production_backend_command(
         "Unable to locate the packaged backend sidecar. Set SYNTHBUD_DESKTOP_BACKEND_EXECUTABLE or bundle a backend launcher."
             .to_string(),
     )
+}
+
+fn apply_bundled_postgres_env(command: &mut Command, resource_dir: &PathBuf) {
+    let postgres_bin = resource_dir.join("postgres").join("bin");
+    let postgres_lib = resource_dir.join("postgres").join("lib");
+    let postgres_share = resource_dir.join("postgres").join("share");
+
+    if postgres_bin.exists() {
+        command.env("SYNTHBUD_DESKTOP_POSTGRES_BIN_DIR", &postgres_bin);
+    }
+    if postgres_share.exists() {
+        // Postgres looks for tzdata, locale info, etc. relative to PGSHAREDIR.
+        command.env("PGSHAREDIR", &postgres_share);
+    }
+    if postgres_lib.exists() {
+        let existing = env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
+        let new_value = if existing.is_empty() {
+            postgres_lib.to_string_lossy().into_owned()
+        } else {
+            format!("{}:{}", postgres_lib.to_string_lossy(), existing)
+        };
+        command.env("DYLD_LIBRARY_PATH", new_value);
+    }
 }
 
 fn configure_backend_command(command: &mut Command, runtime: &BackendRuntime, backend_root: Option<PathBuf>) {

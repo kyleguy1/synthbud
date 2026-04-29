@@ -1,4 +1,4 @@
-import { ApiError, getPlayableUrl, listTags } from "./client";
+import { ApiError, getPlayableUrl, getSoundWaveform, listTags } from "./client";
 
 describe("api client errors", () => {
   it("classifies network failures", async () => {
@@ -41,5 +41,34 @@ describe("getPlayableUrl", () => {
 
   it("falls back to backend preview proxy route", () => {
     expect(getPlayableUrl(42, null)).toBe("http://localhost:8000/api/sounds/42/preview");
+  });
+});
+
+describe("getSoundWaveform", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("requests waveform data for a sound and bin count", async () => {
+    const response = {
+      sound_id: 42,
+      bins: 96,
+      duration_sec: 1.2,
+      peaks: [0.1, 0.4, 0.6]
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getSoundWaveform(42, 96)).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/sounds/42/waveform?bins=96", undefined);
   });
 });

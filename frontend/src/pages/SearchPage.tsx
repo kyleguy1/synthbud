@@ -153,6 +153,8 @@ export function SearchPage() {
                   isFavorite={isFavoriteSound(sound.id)}
                   isActive={isActive}
                   isPlaying={isActive && playerState.isPlaying}
+                  currentTime={isActive ? playerState.currentTime : 0}
+                  playbackDuration={isActive ? playerState.duration : 0}
                   onToggleFavorite={toggleFromSummary}
                   onPreviewToggle={(summary) => {
                     if (playerState.sound?.id === summary.id) {

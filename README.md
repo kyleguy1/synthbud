@@ -115,6 +115,46 @@ Important current notes:
 - if desktop-managed Postgres binaries are not available, the desktop launcher falls back to the configured `SYNTHBUD_DATABASE_URL` or the default local Postgres URL
 - desktop runtime data is written under the user app data directory instead of repo-relative paths
 
+## Build the macOS desktop app
+
+To produce a double-clickable `synthbud.app` (and `.dmg`) that bundles the
+Python backend and Postgres so users do not need Python, Node, or Docker:
+
+Prerequisites (build machine only):
+- Rust toolchain with `cargo`
+- Node.js
+- Homebrew with `postgresql@16` installed (`brew install postgresql@16`)
+- A working `backend/.venv` (the build script installs `pyinstaller` into it on first run)
+- A real 1024×1024 source icon at `frontend/src-tauri/icons/synthbud-icon.png`,
+  expanded once into the `.icns` plus PNG sizes via:
+  `cd frontend/src-tauri && npx @tauri-apps/cli icon icons/synthbud-icon.png`
+
+Then run:
+
+```bash
+./scripts/build_desktop_app.sh
+```
+
+What it does:
+1. Freezes the backend into a single Mach-O executable with PyInstaller
+   (replaces `frontend/src-tauri/bin/synthbud-backend`).
+2. Copies Homebrew Postgres (`initdb`, `pg_ctl`, `postgres`, plus dylibs and
+   `share/`) into `frontend/src-tauri/postgres/`, rewriting dylib references
+   to be relocatable.
+3. Builds the Vite frontend and the Tauri bundle.
+
+Outputs:
+- `frontend/src-tauri/target/release/bundle/macos/synthbud.app`
+- `frontend/src-tauri/target/release/bundle/dmg/synthbud_0.1.0_aarch64.dmg`
+
+Notes:
+- The bundle is unsigned. macOS Gatekeeper will warn on first launch
+  ("right-click → Open" once to acknowledge).
+- Per-user runtime data (Postgres cluster, logs, imported libraries) lives
+  under `~/Library/Application Support/synthbud/`.
+- To refresh the bundled Postgres after a Homebrew upgrade, set
+  `SYNTHBUD_REBUNDLE_POSTGRES=1` and rerun the build script.
+
 ## One-step startup
 
 ```bash

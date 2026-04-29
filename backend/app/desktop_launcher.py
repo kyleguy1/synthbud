@@ -5,6 +5,7 @@ import atexit
 import json
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 import shutil
 import signal
@@ -187,6 +188,15 @@ def resolve_backend_roots() -> tuple[Path, Path]:
         repo_root = backend_root.parent if backend_root.name == "backend" else backend_root
         return repo_root, backend_root
 
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        # Inside a PyInstaller-frozen binary, alembic.ini and the alembic/
+        # tree are unpacked into _MEIPASS at the bundle root. Treat that
+        # directory as both the backend and repo root so run_migrations
+        # can locate them without referencing the dev source tree.
+        bundled_root = Path(meipass).resolve()
+        return bundled_root, bundled_root
+
     backend_root = Path(__file__).resolve().parents[1]
     repo_root = backend_root.parent
     return repo_root, backend_root
@@ -254,9 +264,51 @@ def ensure_database_exists(config: dict[str, Any]) -> None:
         connection.close()
 
 
+def _postgres_server_major_version(initdb_path: Path) -> Optional[str]:
+    try:
+        completed = subprocess.run(
+            [str(initdb_path), "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.SubprocessError:
+        return None
+
+    # `initdb (PostgreSQL) 16.13 (Homebrew)` -> "16"
+    parts = completed.stdout.strip().split()
+    for token in parts:
+        if "." in token and token.split(".")[0].isdigit():
+            return token.split(".")[0]
+    return None
+
+
 def initialize_postgres_cluster(initdb_path: Path, paths: DesktopPaths, config: dict[str, Any]) -> None:
-    if (paths.postgres_data_dir / "PG_VERSION").exists():
-        return
+    pg_version_path = paths.postgres_data_dir / "PG_VERSION"
+    if pg_version_path.exists():
+        existing_major = pg_version_path.read_text(encoding="utf-8").strip()
+        bundled_major = _postgres_server_major_version(initdb_path)
+        if bundled_major and existing_major == bundled_major:
+            return
+
+        # The bundled Postgres can't open a cluster from a different major
+        # version (this happens after upgrading the app or migrating from a
+        # dev-era Docker Postgres). Rename the stale dir aside and re-init
+        # rather than crashing on every launch. The old dir is preserved so
+        # the user can recover it manually if they had data there.
+        archive_target = paths.postgres_data_dir.with_name(
+            f"data.stale-pg{existing_major or 'unknown'}-{int(datetime.now(UTC).timestamp())}"
+        )
+        os.rename(paths.postgres_data_dir, archive_target)
+        paths.postgres_data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Force a deterministic locale. When the desktop app is launched from
+    # Finder/launchd there is no inherited LANG/LC_* and initdb refuses to
+    # guess. C locale + UTF-8 encoding works on every macOS install and
+    # matches what the existing Docker-Postgres dev setup uses.
+    initdb_env = os.environ.copy()
+    initdb_env.setdefault("LC_ALL", "C")
+    initdb_env.setdefault("LANG", "C")
 
     subprocess.run(
         [
@@ -267,8 +319,11 @@ def initialize_postgres_cluster(initdb_path: Path, paths: DesktopPaths, config: 
             config["postgres"]["user"],
             "-A",
             "trust",
+            "--locale=C",
+            "--encoding=UTF8",
         ],
         check=True,
+        env=initdb_env,
     )
 
 
@@ -286,6 +341,15 @@ def start_managed_postgres(paths: DesktopPaths, config: dict[str, Any]) -> Optio
         return None
 
     initialize_postgres_cluster(initdb_path, paths, config)
+
+    # macOS-specific: Postgres aborts with "postmaster became multithreaded
+    # during startup" if its locale resolution triggers Apple's threaded
+    # locale helpers. Forcing a concrete BSD-recognised locale before
+    # pg_ctl runs avoids that path. en_US.UTF-8 ships on every macOS.
+    pg_env = os.environ.copy()
+    pg_env["LC_ALL"] = "en_US.UTF-8"
+    pg_env["LANG"] = "en_US.UTF-8"
+
     subprocess.run(
         [
             str(pg_ctl_path),
@@ -299,6 +363,7 @@ def start_managed_postgres(paths: DesktopPaths, config: dict[str, Any]) -> Optio
             "-w",
         ],
         check=True,
+        env=pg_env,
     )
     ensure_database_exists(config)
     return ManagedPostgres(pg_ctl_path=pg_ctl_path, data_dir=paths.postgres_data_dir)
@@ -319,7 +384,46 @@ def apply_desktop_environment(paths: DesktopPaths, config: dict[str, Any], datab
     os.environ["SYNTHBUD_CORS_ALLOW_ORIGINS"] = json.dumps(DESKTOP_ALLOWED_ORIGINS)
 
 
+def _resolve_alembic_ini(repo_root: Path) -> Path:
+    # In a frozen PyInstaller bundle resolve_backend_roots() returns _MEIPASS
+    # for both repo_root and backend_root, and alembic.ini is unpacked at the
+    # bundle root rather than under backend/.
+    if getattr(sys, "frozen", False):
+        bundled_ini = repo_root / "alembic.ini"
+        if bundled_ini.exists():
+            return bundled_ini
+    return repo_root / "backend" / "alembic.ini"
+
+
 def run_migrations(repo_root: Path) -> None:
+    alembic_ini = _resolve_alembic_ini(repo_root)
+
+    if getattr(sys, "frozen", False):
+        # `sys.executable` is the frozen synthbud-backend binary, so spawning
+        # `-m alembic` would re-enter the launcher. Run alembic in-process and
+        # override `script_location` because the bundled layout flattens
+        # `backend/alembic` to `<bundle>/alembic`.
+        #
+        # alembic loads env.py via importlib.exec_module in a fresh module
+        # context. PyInstaller's embedded importer is already installed at
+        # this point, but the symbolic top-level packages env.py imports
+        # (`app.config`, `app.db`, `app.models`) only get registered in
+        # sys.modules once *something* imports them. Pre-importing them here
+        # keeps env.py's `from app.config import ...` from raising
+        # ModuleNotFoundError.
+        import app  # noqa: F401
+        import app.config  # noqa: F401
+        import app.db  # noqa: F401
+        import app.models  # noqa: F401
+
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+
+        alembic_cfg = AlembicConfig(str(alembic_ini))
+        alembic_cfg.set_main_option("script_location", str(repo_root / "alembic"))
+        alembic_command.upgrade(alembic_cfg, "head")
+        return
+
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "backend")
     subprocess.run(
@@ -328,7 +432,7 @@ def run_migrations(repo_root: Path) -> None:
             "-m",
             "alembic",
             "-c",
-            str(repo_root / "backend" / "alembic.ini"),
+            str(alembic_ini),
             "upgrade",
             "head",
         ],
@@ -419,8 +523,15 @@ def main() -> None:
 
     import uvicorn
 
+    # Import the FastAPI instance directly rather than passing the
+    # "app.main:app" import string. uvicorn's string form spawns a fresh
+    # importer context that PyInstaller's embedded loader can't satisfy
+    # ("Could not import module 'app.main'"); handing it a live ASGI
+    # callable bypasses that path entirely.
+    from app.main import app as fastapi_app
+
     uvicorn.run(
-        "app.main:app",
+        fastapi_app,
         host=args.host,
         port=args.port,
         reload=False,

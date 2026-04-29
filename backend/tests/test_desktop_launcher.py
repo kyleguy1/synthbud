@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 from app import desktop_launcher
@@ -94,3 +95,36 @@ def test_prepare_desktop_runtime_uses_backend_dotenv_database_url(tmp_path: Path
     assert os.environ["SYNTHBUD_DATABASE_URL"] == (
         "postgresql+psycopg2://postgres:postgres@127.0.0.1:5433/synthbud"
     )
+
+
+def test_resolve_backend_roots_uses_meipass_when_frozen(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("SYNTHBUD_DESKTOP_BACKEND_ROOT", raising=False)
+    bundle_root = tmp_path / "_MEIxxxx"
+    bundle_root.mkdir()
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+    repo_root, backend_root = desktop_launcher.resolve_backend_roots()
+
+    assert repo_root == bundle_root
+    assert backend_root == bundle_root
+
+
+def test_resolve_alembic_ini_prefers_bundled_path_when_frozen(tmp_path: Path, monkeypatch):
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    (bundle_root / "alembic.ini").write_text("[alembic]\n", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+    resolved = desktop_launcher._resolve_alembic_ini(bundle_root)
+
+    assert resolved == bundle_root / "alembic.ini"
+
+
+def test_resolve_alembic_ini_uses_dev_layout_when_not_frozen(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+
+    resolved = desktop_launcher._resolve_alembic_ini(tmp_path)
+
+    assert resolved == tmp_path / "backend" / "alembic.ini"

@@ -32,10 +32,7 @@
     "targets": "all",
     "resources": [
       "bin/synthbud-backend",
-      "../../backend/app",
-      "../../backend/alembic",
-      "../../backend/alembic.ini",
-      "../../backend/requirements.txt"
+      "postgres"
     ],
     "macOS": {
       "minimumSystemVersion": "12.0"

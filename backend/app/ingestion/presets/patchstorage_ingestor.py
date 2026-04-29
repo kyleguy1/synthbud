@@ -133,7 +133,7 @@ def ingest_patchstorage(
                         pack=pack,
                         preset_key=str(item["id"]),
                         parsed=parsed,
-                        tags=tags,
+                        raw_tags=tags,
                         source_url=item["url"],
                         parser_version="patchstorage-metadata-0.1",
                     )
